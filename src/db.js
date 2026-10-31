@@ -473,6 +473,13 @@ export class Store extends EventEmitter {
     return this.db.prepare('SELECT * FROM columns WHERE id = ?').get(id);
   }
 
+  // Transforma as 4 colunas padrão (virtuais) em colunas reais, para poder editá-las.
+  materializeColumns(project_id) {
+    if (!this.project(project_id)) fail(`Projeto ${project_id} não encontrado`);
+    this.transaction(() => this.#seedColumns(project_id));
+    return this.columns(project_id);
+  }
+
   #seedColumns(project_id) {
     if (this.db.prepare('SELECT 1 FROM columns WHERE project_id = ?').get(project_id)) return;
     const insert = this.db.prepare('INSERT INTO columns (project_id, name, status, position) VALUES (?, ?, ?, ?)');

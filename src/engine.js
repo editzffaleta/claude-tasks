@@ -64,6 +64,7 @@ function run(store, trigger, { task, changes, actor }) {
 }
 
 function actorName(store, actor) {
+  if (actor?.author === 'claude') return 'Claude';
   if (actor?.user_id) return store.user(actor.user_id)?.name || 'Alguém';
   return actor?.author === 'claude' ? 'Claude' : actor?.author === 'automação' ? 'Uma automação' : 'Alguém';
 }

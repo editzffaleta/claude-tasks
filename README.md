@@ -7,6 +7,11 @@ ele registra a tarefa aqui pelo MCP `tarefas`. Você acompanha tudo em http://lo
 
 Não tem dependências: usa só o Node 22.13+ (com o SQLite embutido, `node:sqlite`).
 
+## Documentação
+
+- **[docs/SISTEMA.md](docs/SISTEMA.md):** arquitetura, instalação e operação, conceitos e regras, guia de cada tela, automações, notificações, permissões, modelo de dados, API REST, segurança e solução de problemas.
+- **[docs/MCP.md](docs/MCP.md):** referência completa do servidor MCP (24 ferramentas, resources, prompts/comandos, autocompletar, erros, protocolo e configuração).
+
 ## Funcionalidades
 
 | Área | O que tem |
@@ -39,20 +44,13 @@ Navegador ── painel + API REST (src/server.js) ─────────�
 - **Automações e notificações** rodam em qualquer processo que grava (painel ou MCP), então valem
   também para o que o Claude faz. Mudanças feitas por automações não disparam outras automações.
 
-### Ferramentas do MCP
+### MCP
 
-| Ferramenta | Para quê |
-| --- | --- |
-| `add_tasks` | cria tarefas (com prazo, subtarefa, dependências, sprint, responsáveis, recorrência…) |
-| `list_tasks` | lista com filtros (status, prazo, sprint, responsável, tipo, busca) |
-| `get_task` | detalhes, subtarefas, dependências, tempo, anexos e histórico |
-| `update_task` | muda qualquer campo, move de projeto/coluna, arquiva, adiciona nota |
-| `complete_tasks` | conclui uma ou várias (as recorrentes geram a próxima) |
-| `list_projects` | projetos, contagens e colunas |
-| `manage_sprints` | lista, cria, inicia e conclui sprints |
-| `log_time` | registra tempo gasto |
-| `attach_file` | anexa um arquivo do disco (print, log) |
-| `list_members` | membros que podem ser responsáveis |
+O MCP `tarefas` (versão 3.0) tem 24 ferramentas para tarefas, projetos, colunas, sprints, tempo,
+anexos, visão geral, atividade, equipe, notificações, automações e configurações. Também tem
+resources (`@tarefas:tarefas://tasks/12`) e 9 prompts que viram comandos no Claude Code, como
+`/mcp__tarefas__proxima`, `/mcp__tarefas__planejar_sprint` e `/mcp__tarefas__relatorio`.
+Referência completa em [docs/MCP.md](docs/MCP.md).
 
 ## Instalação
 

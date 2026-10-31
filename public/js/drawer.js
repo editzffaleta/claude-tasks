@@ -180,7 +180,7 @@ function timeSection(t) {
       <div class="time-list">
         ${task.time_entries.slice(0, 20).map((e) => `
           <div class="time-row">
-            <span class="who">${e.user_name ? esc(e.user_name) : e.author === 'claude' ? 'Claude' : 'Você'}</span>
+            <span class="who">${e.author === 'claude' ? `Claude${e.user_name ? ` · ${esc(e.user_name)}` : ''}` : e.user_name ? esc(e.user_name) : 'Você'}</span>
             <span class="muted">${fmtDate(localDate(new Date(e.started_at)))}</span>
             <span class="note">${esc(e.note)}</span>
             <b>${e.ended_at ? fmtDuration(e.minutes) : '<span class="live-time">rodando</span>'}</b>

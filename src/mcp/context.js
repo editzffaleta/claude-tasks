@@ -1,0 +1,162 @@
+// Estado e formatação compartilhados pelas ferramentas, resources e prompts do MCP.
+import {
+  BOARD_URL, COLUMN_NAME, PRIORITY_LABEL, STATUS_LABEL, Store,
+  describeRecurrence, formatDuration, formatTask, today,
+} from '../db.js';
+import { attachEngine } from '../engine.js';
+
+export const store = new Store();
+attachEngine(store);
+
+export const CLAUDE = { author: 'claude' };
+
+// Quem está usando o Claude: CLAUDE_TASKS_USER (e-mail ou nome) ou, se o quadro tem
+// uma única conta, essa conta. Usado para "minhas tarefas", timers e notificações.
+export function me() {
+  const ref = process.env.CLAUDE_TASKS_USER;
+  if (ref) return store.findUser(ref);
+  const users = store.listUsers();
+  return users.length === 1 ? users[0] : null;
+}
+
+// Tempo registrado pelo Claude conta para a pessoa que está usando ele.
+export const timeActor = () => ({ author: 'claude', user_id: me()?.id ?? null });
+
+export const boardLink = (project) => (project ? `${BOARD_URL}/?project=${project.id}` : BOARD_URL);
+export const taskLink = (id) => `${BOARD_URL}/?task=${id}`;
+
+export function projectFrom(args, { create = true } = {}) {
+  if (args.project_path || args.project) return store.resolveProject({ project_path: args.project_path, project: args.project, create });
+  return null;
+}
+
+// Sem projeto informado, usa o diretório em que a sessão do Claude está.
+export function requireProject(args, { create = true } = {}) {
+  const p = projectFrom(args, { create }) || store.resolveProject({ project_path: process.cwd(), create });
+  if (!p) throw new Error('Projeto não encontrado no quadro');
+  return p;
+}
+
+export function userIds(refs) {
+  return (Array.isArray(refs) ? refs : [refs]).filter(Boolean).map((r) => {
+    if (r === 'me' || r === 'eu') {
+      const u = me();
+      if (!u) throw new Error('Não sei quem é "eu": defina CLAUDE_TASKS_USER na configuração do MCP');
+      return u.id;
+    }
+    const u = store.findUser(r);
+    if (!u) throw new Error(`Membro "${r}" não encontrado (veja list_members)`);
+    return u.id;
+  });
+}
+
+// Versão enxuta da tarefa para respostas em JSON.
+export function taskJson(t) {
+  return {
+    id: t.id,
+    title: t.title,
+    project: t.project_name,
+    project_id: t.project_id,
+    status: t.status,
+    column: t.column_name || COLUMN_NAME[t.status],
+    priority: t.priority,
+    type: t.type,
+    tags: t.tags,
+    start_date: t.start_date,
+    due_date: t.due_date,
+    overdue: t.overdue,
+    estimate_minutes: t.estimate_minutes,
+    spent_minutes: t.spent_minutes,
+    sprint: t.sprint_name,
+    parent_id: t.parent_id,
+    subtasks: t.subtask_count ? { done: t.subtask_done, total: t.subtask_count } : null,
+    open_blockers: t.open_blockers,
+    assignees: t.assignee_ids.map((id) => store.user(id)?.name).filter(Boolean),
+    recurrence: t.recurrence,
+    archived: !!t.archived_at,
+    source: t.source,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+    completed_at: t.completed_at,
+    url: taskLink(t.id),
+  };
+}
+
+export function describeTask(t) {
+  const lines = [
+    formatTask(t),
+    `Projeto: ${t.project_name}${t.project_path ? ` (${t.project_path})` : ''} · coluna: ${t.column_name || COLUMN_NAME[t.status]}`,
+  ];
+  const facts = [];
+  if (t.start_date) facts.push(`início ${t.start_date}`);
+  if (t.due_date) facts.push(`prazo ${t.due_date}${t.overdue ? ' (atrasada)' : ''}`);
+  if (t.estimate_minutes || t.spent_minutes) {
+    facts.push(`tempo ${formatDuration(t.spent_minutes)} de ${t.estimate_minutes ? formatDuration(t.estimate_minutes) : 'sem estimativa'}${t.timer_running ? ' (timer rodando)' : ''}`);
+  }
+  if (t.recurrence) facts.push(`repete ${describeRecurrence(t.recurrence)}`);
+  if (t.sprint_name) facts.push(`sprint ${t.sprint_name}`);
+  const people = store.assigneesOf(t.id).map((u) => u.name);
+  if (people.length) facts.push(`responsáveis: ${people.join(', ')}`);
+  if (facts.length) lines.push(facts.join(' · '));
+  lines.push(`Criada: ${t.created_at} por ${t.source} · Atualizada: ${t.updated_at} · ${taskLink(t.id)}`, '', t.description || '(sem descrição)');
+  if (t.parent_id) lines.push('', `Subtarefa de #${t.parent_id} ${t.parent_title}`);
+  if (t.subtasks?.length) lines.push('', 'Subtarefas:', ...t.subtasks.map((s) => `- ${formatTask(s)}`));
+  if (t.blockers?.length) lines.push('', 'Bloqueada por:', ...t.blockers.map((b) => `- #${b.id} [${STATUS_LABEL[b.status]}] ${b.title}`));
+  if (t.blocking?.length) lines.push('', 'Bloqueia:', ...t.blocking.map((b) => `- #${b.id} [${STATUS_LABEL[b.status]}] ${b.title}`));
+  if (t.attachments?.length) {
+    lines.push('', 'Anexos (leia com get_attachment):', ...t.attachments.map((a) => `- id ${a.id}: ${a.name} (${a.mime}, ${Math.ceil(a.size / 1024)} KB)`));
+  }
+  if (t.time_entries?.length) {
+    lines.push('', 'Tempo registrado:', ...t.time_entries.slice(0, 10).map((e) => `- ${e.started_at.slice(0, 10)} ${e.user_name || e.author}: ${e.ended_at ? formatDuration(e.minutes) : 'rodando'}${e.note ? ` — ${e.note}` : ''}`));
+  }
+  const notes = (t.notes || []).map((n) => `- ${n.created_at.slice(0, 16).replace('T', ' ')} ${n.author === 'claude' ? 'Claude' : n.user_name || n.author}${n.kind === 'event' ? ' ·' : ':'} ${n.body}`);
+  if (notes.length) lines.push('', 'Histórico:', ...notes);
+  return lines.join('\n');
+}
+
+// Quadro do projeto em texto: colunas com as tarefas abertas (subtarefas recuadas).
+export function projectBoard(project) {
+  const cols = store.columns(project.id);
+  const tasks = store.listTasks({ project_id: project.id, status: 'open', limit: 1000 });
+  const sprints = store.sprints(project.id).filter((s) => s.status !== 'completed');
+  const lines = [`# ${project.name}`, project.path ? `Pasta: ${project.path}` : 'Sem pasta vinculada', boardLink(project)];
+  if (project.description) lines.push('', project.description);
+  for (const s of sprints) {
+    lines.push('', `Sprint ${s.status === 'active' ? 'ativa' : 'planejada'}: ${s.name} (${s.done}/${s.total} concluídas)${s.goal ? ` — ${s.goal}` : ''}`);
+  }
+  for (const col of cols.filter((c) => c.status !== 'done')) {
+    const list = tasks.filter((t) => (t.column_id ? t.column_id === col.id : cols.find((c) => c.status === t.status) === col));
+    lines.push('', `## ${col.name} (${list.length})`);
+    for (const t of list) lines.push(`${t.parent_id ? '  - ' : '- '}${formatTask(t)}`);
+  }
+  const done = store.listTasks({ project_id: project.id, status: 'done', limit: 10 });
+  if (done.length) lines.push('', '## Concluídas recentemente', ...done.map((t) => `- ${formatTask(t)}`));
+  return lines.join('\n');
+}
+
+export function overviewText(project) {
+  const s = store.stats({ project_id: project?.id });
+  const t = s.totals;
+  const lines = [
+    project ? `# Visão geral · ${project.name}` : '# Visão geral de todos os projetos',
+    `Hoje: ${today()}`,
+    '',
+    `Abertas: ${t.open} (${t.doing} em andamento, ${t.blocked} bloqueadas) · Atrasadas: ${t.overdue} · Vencem em 7 dias: ${t.due_week}`,
+    `Últimos 7 dias: ${t.done_7d} concluídas, ${t.created_7d} criadas (${t.claude_7d} pelo Claude), ${formatDuration(t.minutes_7d)} registradas`,
+  ];
+  if (!project && s.byProject.length) {
+    lines.push('', '## Por projeto', ...s.byProject.sort((a, b) => b.open - a.open)
+      .map((p) => `- ${p.name}: ${p.open} abertas${p.doing ? `, ${p.doing} em andamento` : ''}${p.blocked ? `, ${p.blocked} bloqueadas` : ''}${p.overdue ? `, ${p.overdue} ATRASADAS` : ''}`));
+  }
+  lines.push('', '## Por prioridade (abertas)', ['urgent', 'high', 'medium', 'low'].map((k) => `${PRIORITY_LABEL[k]}: ${s.byPriority[k]}`).join(' · '));
+  if (s.sprint) lines.push('', `## Sprint ativa: ${s.sprint.name} — ${s.sprint.done}/${s.sprint.total} concluídas${s.sprint.end_date ? `, termina ${s.sprint.end_date}` : ''}`);
+  const overdue = store.listTasks({ project_id: project?.id, due: 'overdue', limit: 15 });
+  if (overdue.length) lines.push('', '## Atrasadas', ...overdue.map((x) => `- ${formatTask(x, { withProject: !project })}`));
+  if (s.upcoming.length) lines.push('', '## Próximos prazos', ...s.upcoming.map((x) => `- ${formatTask(x, { withProject: !project })}`));
+  const doing = store.listTasks({ project_id: project?.id, status: 'doing', limit: 15 });
+  if (doing.length) lines.push('', '## Em andamento', ...doing.map((x) => `- ${formatTask(x, { withProject: !project })}`));
+  const blocked = store.listTasks({ project_id: project?.id, status: 'blocked', limit: 15 });
+  if (blocked.length) lines.push('', '## Bloqueadas', ...blocked.map((x) => `- ${formatTask(x, { withProject: !project })}`));
+  return lines.join('\n');
+}
+

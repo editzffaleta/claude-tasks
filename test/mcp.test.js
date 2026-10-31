@@ -53,9 +53,17 @@ test('initialize e tools/list', async () => {
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   const list = await rpc('tools/list');
   assert.deepEqual(list.result.tools.map((t) => t.name).sort(), [
-    'add_tasks', 'attach_file', 'complete_tasks', 'get_task', 'list_members', 'list_projects', 'list_tasks',
-    'log_time', 'manage_sprints', 'update_task',
+    'add_comment', 'add_tasks', 'attach_file', 'complete_tasks', 'delete_tasks', 'get_activity', 'get_attachment',
+    'get_overview', 'get_task', 'list_members', 'list_notifications', 'list_projects', 'list_tasks', 'log_time',
+    'manage_automations', 'manage_columns', 'manage_project', 'manage_settings', 'manage_sprints', 'send_notification',
+    'time_report', 'timer', 'update_task', 'update_tasks',
   ]);
+  for (const t of list.result.tools) {
+    assert.ok(t.title && t.description && t.inputSchema?.type === 'object', `${t.name} completo`);
+    assert.equal(typeof t.annotations.readOnlyHint, 'boolean', `${t.name} anotado`);
+  }
+  assert.equal(list.result.tools.find((t) => t.name === 'delete_tasks').annotations.destructiveHint, true);
+  assert.deepEqual(Object.keys(init.result.capabilities).sort(), ['completions', 'prompts', 'resources', 'tools']);
 });
 
 test('add_tasks resolve o projeto pela raiz git e não duplica', async () => {
@@ -118,7 +126,7 @@ test('subtarefas, dependências, sprints, prazos, recorrência, tempo e anexos',
   assert.match(detail, /tempo 1h30m de 8h/);
   assert.match(detail, /Subtarefas:\n- #5 .*Etapa 1/);
   assert.match(detail, /Bloqueada por:\n- #4/);
-  assert.match(detail, /Anexos:\n- print\.txt/);
+  assert.match(detail, /Anexos \(leia com get_attachment\):\n- id \d+: print\.txt/);
 
   const overdue = await call('list_tasks', { due: 'overdue' });
   assert.match(overdue.text, /#3 /);
@@ -130,6 +138,121 @@ test('subtarefas, dependências, sprints, prazos, recorrência, tempo e anexos',
 
   const closed = await call('manage_sprints', { project: 'MeuApp', action: 'complete', id: 1 });
   assert.match(closed.text, /1 tarefa\(s\) pendente\(s\) movida\(s\) para o backlog/);
+});
+
+test('edição em massa, posição, tags, dependências incrementais, comentários e exclusão', async () => {
+  const r = await call('add_tasks', { project: 'Massa', tasks: [{ title: 'A' }, { title: 'B' }, { title: 'C', tags: ['x'] }] });
+  const [a, b, c] = [...r.text.matchAll(/#(\d+)/g)].map((m) => Number(m[1]));
+  const bulk = await call('update_tasks', { ids: [a, b], priority: 'urgent', add_tags: ['lote'] });
+  assert.match(bulk.text, /Atualizadas 2 tarefa\(s\)/);
+  assert.match(bulk.text, /\[urgente\] A \(lote\)/);
+
+  await call('update_task', { id: c, add_tags: ['y'], remove_tags: ['x'], add_blocked_by: [a] });
+  await call('update_task', { id: c, add_blocked_by: [b] });
+  await call('update_task', { id: c, position: 'top' });
+  const json = JSON.parse((await call('get_task', { id: c, format: 'json' })).text);
+  assert.deepEqual(json.tags, ['y']);
+  assert.deepEqual(json.blocked_by.map((x) => x.id).sort(), [a, b].sort());
+
+  assert.match((await call('add_comment', { id: c, body: 'Decidido usar SQLite' })).text, /Comentário adicionado/);
+  const listJson = JSON.parse((await call('list_tasks', { project: 'Massa', format: 'json', sort: 'priority' })).text);
+  assert.equal(listJson.total, 3);
+  assert.equal(listJson.tasks[0].priority, 'urgent');
+
+  const refused = await call('delete_tasks', { ids: [b], confirm: false });
+  assert.equal(refused.isError, true);
+  assert.match((await call('delete_tasks', { ids: [b], confirm: true })).text, /Excluídas: #\d+ B/);
+});
+
+test('projetos, colunas, timer, relatório de tempo e anexos legíveis', async () => {
+  assert.match((await call('manage_project', { action: 'create', name: 'Pessoal', description: 'Coisas minhas', color: '#2a78d6' })).text, /Projeto criado: \[\d+\] Pessoal/);
+  const cols = await call('manage_columns', { project: 'Pessoal', action: 'create', name: 'Revisão', status: 'doing' });
+  assert.match(cols.text, /Revisão \[em andamento\] \(id \d+\)/);
+  const renamed = await call('manage_columns', { project: 'Pessoal', action: 'update', column: 'A fazer', name: 'Backlog' });
+  assert.match(renamed.text, /1\. Backlog \[a fazer\]/);
+  const t = await call('add_tasks', { project: 'Pessoal', tasks: [{ title: 'Revisar contrato', column: 'Revisão' }] });
+  const id = Number(t.text.match(/#(\d+)/)[1]);
+  const inCol = await call('list_tasks', { project: 'Pessoal', column: 'Revisão' });
+  assert.match(inCol.text, /Revisar contrato/);
+
+  assert.match((await call('timer', { action: 'start', id })).text, /Timer iniciado/);
+  assert.match((await call('timer', { action: 'status' })).text, new RegExp(`#${id} Revisar contrato`));
+  assert.match((await call('timer', { action: 'stop', id })).text, /Timer parado/);
+  await call('log_time', { id, duration: '2h', note: 'leitura' });
+  const report = await call('time_report', { project: 'Pessoal', group_by: 'task' });
+  assert.match(report.text, /Revisar contrato \(Pessoal\): 2h/);
+
+  const png = join(dir, 'tela.png');
+  writeFileSync(png, Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a5e00000000049454e44ae426082', 'hex'));
+  const txt = join(dir, 'log.txt');
+  writeFileSync(txt, 'erro na linha 42');
+  const imgId = Number((await call('attach_file', { id, path: png })).text.match(/id (\d+)/)[1]);
+  const txtId = Number((await call('attach_file', { id, path: txt })).text.match(/id (\d+)/)[1]);
+  const img = await rpc('tools/call', { name: 'get_attachment', arguments: { id: imgId } });
+  assert.equal(img.result.content[1].type, 'image');
+  assert.equal(img.result.content[1].mimeType, 'image/png');
+  assert.match((await call('get_attachment', { id: txtId })).text, /erro na linha 42/);
+
+  assert.match((await call('manage_project', { action: 'archive', project: 'Pessoal' })).text, /arquivado/);
+});
+
+test('visão geral, atividade, notificações, automações e configurações', async () => {
+  assert.match((await call('get_overview', {})).text, /# Visão geral de todos os projetos/);
+  assert.match((await call('get_overview', { project: 'MeuApp' })).text, /# Visão geral · MeuApp/);
+  assert.match((await call('get_activity', { limit: 5 })).text, /Claude/);
+  assert.match((await call('send_notification', { message: 'Lembrar do deploy' })).text, /Notificação enviada/);
+  assert.match((await call('list_notifications', { mark_read: true })).text, /Claude: Lembrar do deploy/);
+  assert.equal((await call('list_notifications', {})).text, 'Nenhuma notificação.');
+
+  const rule = await call('manage_automations', {
+    action: 'create', name: 'Bug vira alta', trigger: 'task_created', conditions: { type: ['bug'] }, action_type: 'set_priority', action_value: 'high',
+  });
+  assert.match(rule.text, /Criada: #\d+ \[ativa\] Bug vira alta/);
+  const bug = await call('add_tasks', { project: 'MeuApp', tasks: [{ title: 'Crash ao salvar', type: 'bug' }] });
+  const bugId = Number(bug.text.match(/#(\d+)/)[1]);
+  assert.match((await call('get_task', { id: bugId })).text, /\[alta\] Crash ao salvar/);
+  const ruleId = Number(rule.text.match(/#(\d+)/)[1]);
+  assert.match((await call('manage_automations', { action: 'disable', id: ruleId })).text, /\[pausada\]/);
+
+  assert.match((await call('manage_settings', { action: 'update', due_soon_days: 3 })).text, /3 dia\(s\) de antecedência/);
+  assert.equal((await call('manage_settings', { action: 'update', due_soon_days: 99 })).isError, true);
+});
+
+test('resources: lista, templates e leitura', async () => {
+  const list = await rpc('resources/list');
+  const uris = list.result.resources.map((r) => r.uri);
+  assert.ok(uris.includes('tarefas://overview') && uris.includes('tarefas://my-tasks'));
+  assert.ok(uris.some((u) => /^tarefas:\/\/projects\/\d+$/.test(u)));
+  const templates = await rpc('resources/templates/list');
+  assert.deepEqual(templates.result.resourceTemplates.map((t) => t.uriTemplate), ['tarefas://tasks/{id}', 'tarefas://projects/{id}', 'tarefas://projects/{id}/overview']);
+  const task = await rpc('resources/read', { uri: 'tarefas://tasks/2' });
+  assert.equal(task.result.contents[0].mimeType, 'text/markdown');
+  assert.match(task.result.contents[0].text, /#2 /);
+  const board = await rpc('resources/read', { uri: 'tarefas://projects/1' });
+  assert.match(board.result.contents[0].text, /^# MeuApp/);
+  const missing = await rpc('resources/read', { uri: 'tarefas://tasks/99999' });
+  assert.equal(missing.error.code, -32002);
+});
+
+test('prompts e autocompletar', async () => {
+  const list = await rpc('prompts/list');
+  assert.deepEqual(list.result.prompts.map((p) => p.name).sort(), [
+    'concluir', 'pendencias', 'planejar_sprint', 'proxima', 'quebrar_tarefa', 'registrar_pendencias', 'relatorio', 'revisar_prazos', 'triagem',
+  ]);
+  const p = await rpc('prompts/get', { name: 'pendencias', arguments: { projeto: 'MeuApp' } });
+  assert.equal(p.result.messages[0].role, 'user');
+  assert.match(p.result.messages[0].content.text, /Projeto: MeuApp/);
+  const q = await rpc('prompts/get', { name: 'quebrar_tarefa', arguments: { tarefa: '#2 Escrever README' } });
+  assert.match(q.result.messages[0].content.text, /parent_id: 2/);
+  const missing = await rpc('prompts/get', { name: 'concluir', arguments: {} });
+  assert.equal(missing.error.code, -32602);
+  const rel = await rpc('prompts/get', { name: 'relatorio', arguments: { periodo: 'semana' } });
+  assert.match(rel.result.messages[0].content.text, /Concluídas no período/);
+
+  const c1 = await rpc('completion/complete', { ref: { type: 'ref/prompt', name: 'pendencias' }, argument: { name: 'projeto', value: 'me' } });
+  assert.ok(c1.result.completion.values.includes('MeuApp'));
+  const c2 = await rpc('completion/complete', { ref: { type: 'ref/resource', uri: 'tarefas://tasks/{id}' }, argument: { name: 'id', value: '' } });
+  assert.ok(c2.result.completion.values.length > 0);
 });
 
 test('erros voltam como isError', async () => {

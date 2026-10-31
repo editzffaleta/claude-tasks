@@ -125,6 +125,43 @@ export const insightMethods = {
     return { totals, weeks, byPriority, byProject, timeByProject, upcoming, sprint, activity: this.activity({ project_id, limit: 20 }) };
   },
 
+  // Tempo registrado num período (datas locais, inclusivas), agrupado por tarefa, projeto, dia ou pessoa.
+  timeReport({ project_id, from, to, group_by = 'task' } = {}) {
+    const end = to || today();
+    const start = from || addDays(end, -6);
+    const scope = project_id ? 'AND t.project_id = ?' : '';
+    const entries = this.db.prepare(`
+      SELECT e.id, e.task_id, e.author, e.note, e.started_at, e.ended_at, t.title, t.project_id, p.name AS project_name,
+             u.name AS user_name, date(e.started_at, 'localtime') AS day,
+             COALESCE(e.minutes, (unixepoch('now') - unixepoch(e.started_at)) / 60) AS minutes
+      FROM time_entries e JOIN tasks t ON t.id = e.task_id JOIN projects p ON p.id = t.project_id
+      LEFT JOIN users u ON u.id = e.user_id
+      WHERE date(e.started_at, 'localtime') BETWEEN ? AND ? ${scope}
+      ORDER BY e.started_at`).all(start, end, ...(project_id ? [project_id] : []));
+    const keyOf = {
+      task: (e) => [`#${e.task_id}`, `#${e.task_id} ${e.title} (${e.project_name})`],
+      project: (e) => [String(e.project_id), e.project_name],
+      day: (e) => [e.day, e.day],
+      person: (e) => [e.user_name || e.author, e.user_name || (e.author === 'claude' ? 'Claude' : e.author)],
+    }[group_by];
+    if (!keyOf) fail('"group_by" deve ser task, project, day ou person');
+    const groups = new Map();
+    for (const e of entries) {
+      const [key, label] = keyOf(e);
+      if (!groups.has(key)) groups.set(key, { key, label, minutes: 0, entries: 0 });
+      const g = groups.get(key);
+      g.minutes += e.minutes;
+      g.entries++;
+    }
+    return {
+      from: start,
+      to: end,
+      total: entries.reduce((n, e) => n + e.minutes, 0),
+      groups: [...groups.values()].sort((a, b) => (group_by === 'day' ? a.key.localeCompare(b.key) : b.minutes - a.minutes)),
+      entries,
+    };
+  },
+
   activity({ project_id, limit = 30 } = {}) {
     const scope = project_id ? 'AND t.project_id = ?' : '';
     const args = project_id ? [project_id, project_id] : [];
