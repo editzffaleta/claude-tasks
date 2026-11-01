@@ -8,7 +8,7 @@ import { cleanId, forbid, now } from './db.js';
 import { exportCsv, fetchJira, fetchTrello, importCsv, importJiraIssues, importTrelloBoard, runSync } from './importers.js';
 import { deleteInbox, deleteRule, inboxConfig, listRules, saveInbox, saveRule, syncInbox, testInbox } from './inbox.js';
 import { mailEnabled, sendLater, testSmtp } from './mailer.js';
-import { mapStatus, queryMap } from './mapa.js';
+import { mapStatus, queryMap, readSimulation, simulationFile, simulationTasks, taskFromSimulation } from './mapa.js';
 import { DEFAULT_SETTINGS } from './store/insights.js';
 import { NOTIFY_TYPES } from './store/team.js';
 
@@ -506,6 +506,35 @@ export function buildRoutes({ store, setSession, clearSession }) {
       const args = url.searchParams.getAll('arg').slice(0, 6);
       if (!args.length) throw new HttpError(400, 'Informe o que consultar (arg=find&arg=termo)');
       return { text: await queryMap(store.project(id(params[0])), args) };
+    }],
+    // Simulação do mapa no Breakscale (gravada pelo plugin em mapa-do-codigo/simulacao.json).
+    ['GET', /^\/api\/projects\/(\d+)\/mapa\/simulacao$/, ({ params, user }) => {
+      guard(user, id(params[0]), 'read');
+      const project = store.project(id(params[0]));
+      const sim = readSimulation(project);
+      if (!sim) throw new HttpError(404, 'Este projeto ainda não tem simulação');
+      return { ...sim, tarefas: simulationTasks(store, project) };
+    }],
+    ['GET', /^\/api\/projects\/(\d+)\/mapa\/simulacao\/arquivo$/, ({ params, user, res }) => {
+      guard(user, id(params[0]), 'read');
+      const file = simulationFile(store.project(id(params[0])));
+      if (!file) throw new HttpError(404, 'Este projeto ainda não tem simulação');
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        'x-content-type-options': 'nosniff',
+      });
+      res.end(file.body);
+    }],
+    ['POST', /^\/api\/projects\/(\d+)\/mapa\/simulacao\/tarefas$/, ({ params, body, user }) => {
+      guard(user, id(params[0]), 'edit');
+      const project = store.project(id(params[0]));
+      const ids = (Array.isArray(body.ids) ? body.ids : [body.id]).slice(0, 100);
+      if (!ids.length || ids.some((x) => !String(x ?? '').trim())) throw new HttpError(400, 'Informe o gargalo');
+      // Confere a lista inteira antes de criar, para um id errado não deixar o pedido feito pela metade.
+      const known = new Set(readSimulation(project)?.gargalos.map((g) => g.id));
+      if (ids.some((x) => !known.has(String(x)))) throw new HttpError(404, 'Esse gargalo não está na simulação deste projeto');
+      return { tasks: ids.map((g) => ({ gargalo: String(g), ...taskFromSimulation(store, project, g, actorOf(user)) })) };
     }],
 
     ['GET', /^\/api\/projects\/(\d+)\/members$/, ({ params, user }) => {

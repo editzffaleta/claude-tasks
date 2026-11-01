@@ -58,7 +58,14 @@ export function mapStatus(project) {
   const exists = existsSync(join(dir, 'index.html'));
   const g = exists ? readGraph(project) : null;
   const issues = g?.health?.issues || [];
+  const sim = exists ? readSimulation(project) : null;
   return {
+    simulation: sim ? {
+      generated_at: sim.geradoEm,
+      scenarios: sim.cenarios.length,
+      bottlenecks: sim.gargalos.length,
+      urgent: sim.gargalos.filter((x) => x.severidade === 'alta').length,
+    } : null,
     available: true,
     exists,
     folder: dir,
@@ -103,14 +110,23 @@ export function tasksOnMap(store, project) {
     byBase.set(base, [...(byBase.get(base) || []), f.p]);
   }
   const since = new Date(Date.now() - 14 * 86400000).toISOString();
+  const nodeIds = new Set((g?.nodes || []).map((n) => n.id));
+  const cardOf = (t) => {
+    if (t.external_source !== 'mapa') return null;
+    // Tarefas criadas a partir de um cartão (ou de uma peça da planta) ficam presas a ele; as de um
+    // gargalo da simulação, ao cartão da parte do mapa que o componente representa.
+    const m = String(t.external_id || '').match(/^(card|construir|simulacao):(.+?)(?:#\d+)?$/);
+    if (!m) return null;
+    if (m[1] !== 'simulacao') return m[2];
+    return nodeIds.has(m[2]) ? `n:${m[2]}` : null;
+  };
   return store.listTasks({ project_id: project.id, status: 'all', done_since: since, limit: 2000 })
     .map((t) => {
-      // Tarefas criadas a partir de um cartão (ou de uma peça da planta) ficam presas a ele.
-      const origin = t.external_source === 'mapa' ? String(t.external_id || '').match(/^(card|construir):(.+?)(?:#\d+)?$/) : null;
+      const card = cardOf(t);
       return {
         id: t.id, ref: t.ref || `#${t.id}`, title: t.title, status: t.status, priority: t.priority, done: t.status === 'done',
         files: filesMentioned(`${t.title}\n${t.description}`, files, byBase),
-        cards: origin ? [origin[2]] : [],
+        cards: card ? [card] : [],
       };
     })
     .filter((t) => t.files.length || t.cards.length);
@@ -119,7 +135,7 @@ export function tasksOnMap(store, project) {
 // Tarefa criada a partir do mapa (problema da Saúde, item da revisão da planta, peça a construir
 // ou um cartão). A origem evita duplicar: o mesmo problema vira uma tarefa só.
 export function taskFromMap(store, project, body, actor) {
-  const kind = ['saude', 'revisao', 'construir', 'card'].includes(body?.origin?.kind) ? body.origin.kind : 'card';
+  const kind = ['saude', 'revisao', 'construir', 'simulacao', 'card'].includes(body?.origin?.kind) ? body.origin.kind : 'card';
   const originId = String(body?.origin?.id ?? '').slice(0, 300);
   // Problemas da Saúde, itens da revisão e peças a construir viram uma tarefa só; sobre um
   // cartão qualquer dá para criar várias (cada uma ganha um sufixo próprio).
@@ -143,6 +159,111 @@ export function taskFromMap(store, project, body, actor) {
 }
 
 const summary = (t) => ({ id: t.id, ref: t.ref || `#${t.id}`, title: t.title, status: t.status });
+
+// ---- simulação no Breakscale ----
+// O breakscale.mjs do plugin grava mapa-do-codigo/simulacao.json (resultado, com os gargalos) e
+// simulacao.breakscale (o projeto, que abre em breakscale.tech). O quadro só lê: quem simula é o Claude.
+
+const SIM_RESULT = 'simulacao.json';
+const SIM_FILE = 'simulacao.breakscale';
+// Só links do próprio Breakscale: o projeto vai depois do #, parte que o navegador não envia a servidor nenhum.
+const BREAKSCALE_LINK = /^https:\/\/breakscale\.tech\/[^\s"'<>\\]*$/;
+const sims = new Map(); // caminho → { mtime, sim }
+
+const text = (v, n = 300) => (typeof v === 'string' ? v.slice(0, n) : null);
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const list = (v, n) => (Array.isArray(v) ? v.slice(0, n) : []);
+const link = (v) => (typeof v === 'string' && BREAKSCALE_LINK.test(v) ? v : null);
+const COMPONENT_NUMBERS = ['entrada', 'concluidas', 'ocupacao', 'esperando', 'p99', 'falhas', 'recusadas', 'tempoEsgotado', 'acertoCache'];
+
+// O arquivo vem da pasta do projeto: só passam os campos esperados, com tipo e tamanho conferidos.
+function cleanSimulation(raw, hasFile) {
+  if (raw?.$schema !== 'mapa/simulacao@1') return null;
+  return {
+    nome: text(raw.nome, 120),
+    geradoEm: text(raw.geradoEm, 40),
+    origem: raw.origem === 'hospedado' ? 'hospedado' : 'local',
+    pacote: text(raw.pacote, 60),
+    link: link(raw.link),
+    temArquivo: hasFile,
+    componentes: list(raw.componentes, 200).map((c) => ({ id: text(c?.id, 120), nome: text(c?.nome, 120), tipo: text(c?.tipo, 30) })).filter((c) => c.id),
+    cenarios: list(raw.cenarios, 12).map((s) => ({
+      fator: num(s?.fator), nome: text(s?.nome, 60), link: link(s?.link), segundos: num(s?.segundos), interrompido: !!s?.interrompido,
+      oferecido: num(s?.oferecido), servido: num(s?.servido), falhas: num(s?.falhas), p50: num(s?.p50), p95: num(s?.p95), p99: num(s?.p99),
+      motivos: list(s?.motivos, 20).map((m) => ({ motivo: text(m?.motivo, 30), texto: text(m?.texto, 120), n: num(m?.n) })),
+      componentes: list(s?.componentes, 200).map((c) => Object.fromEntries([['id', text(c?.id, 120)], ...COMPONENT_NUMBERS.map((k) => [k, num(c?.[k])])])),
+    })).filter((s) => s.fator),
+    gargalos: list(raw.gargalos, 100).map((g) => ({
+      id: text(g?.id, 120), componente: text(g?.componente, 120), nome: text(g?.nome, 120), tipo: text(g?.tipo, 30),
+      fator: num(g?.fator), trafego: num(g?.trafego),
+      severidade: ['alta', 'media', 'baixa'].includes(g?.severidade) ? g.severidade : 'media',
+      titulo: text(g?.titulo, 200), porque: text(g?.porque, 1000), sugestao: text(g?.sugestao, 1000),
+    })).filter((g) => g.id && g.titulo),
+    premissas: list(raw.premissas, 200).map((p) => ({ componente: text(p?.componente, 120), texto: text(p?.texto, 600), origem: p?.origem === 'código' ? 'código' : 'chute' })).filter((p) => p.texto),
+    deixadoDeFora: list(raw.deixadoDeFora, 100).map((x) => ({ texto: text(x?.texto, 600) })).filter((x) => x.texto),
+  };
+}
+
+export function readSimulation(project) {
+  const dir = mapDirOf(project);
+  if (!dir) return null;
+  const file = join(dir, SIM_RESULT);
+  let mtime;
+  try { mtime = statSync(file).mtimeMs; } catch { return null; }
+  const cached = sims.get(file);
+  if (cached?.mtime === mtime) return cached.sim;
+  let sim = null;
+  try { sim = cleanSimulation(JSON.parse(readFileSync(file, 'utf8')), existsSync(join(dir, SIM_FILE))); } catch {}
+  sims.set(file, { mtime, sim });
+  return sim;
+}
+
+// O projeto do Breakscale para baixar. Confere que é mesmo um arquivo do Breakscale antes de entregar.
+export function simulationFile(project) {
+  const dir = mapDirOf(project);
+  if (!dir) return null;
+  let body;
+  try { body = readFileSync(join(dir, SIM_FILE), 'utf8'); } catch { return null; }
+  if (body.length > 5_000_000) return null;
+  try { if (JSON.parse(body)?.app !== 'breakscale') return null; } catch { return null; }
+  const name = String(project.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'projeto';
+  return { body, name: `${name}.breakscale` };
+}
+
+// Tarefas que já saíram de um gargalo: id do gargalo → tarefa.
+export function simulationTasks(store, project) {
+  const rows = store.db.prepare("SELECT id FROM tasks WHERE project_id = ? AND external_source = 'mapa' AND external_id LIKE 'simulacao:%'").all(project.id);
+  const out = {};
+  for (const { id } of rows) {
+    const t = store.task(id);
+    if (t) out[String(t.external_id).slice('simulacao:'.length)] = summary(t);
+  }
+  return out;
+}
+
+const PRIORITY_OF = { alta: 'high', media: 'medium', baixa: 'low' };
+
+// Um gargalo vira tarefa uma vez só. O texto vem do resultado gravado, não de quem pede.
+export function taskFromSimulation(store, project, bottleneckId, actor) {
+  const sim = readSimulation(project);
+  const g = sim?.gargalos.find((x) => x.id === String(bottleneckId));
+  if (!g) throw Object.assign(new Error('Esse gargalo não está na simulação deste projeto'), { status: 404 });
+  const date = sim.geradoEm ? sim.geradoEm.slice(0, 10).split('-').reverse().join('/') : '';
+  const description = [
+    `Gargalo encontrado na simulação do Breakscale${date ? ` de ${date}` : ''} (aba Mapa do código › Simulação).`,
+    g.porque || '',
+    g.sugestao ? `**Sugestão:** ${g.sugestao}` : '',
+    'Os números da simulação partem de premissas, e parte delas é estimativa: confira na aba antes de decidir.',
+    sim.link ? `[Abrir no Breakscale](${sim.link})` : '',
+  ].filter(Boolean).join('\n\n');
+  return taskFromMap(store, project, {
+    title: g.titulo,
+    description,
+    priority: PRIORITY_OF[g.severidade],
+    tags: ['simulação'],
+    origin: { kind: 'simulacao', id: g.id },
+  }, actor);
+}
 
 // ---- servidor do mapa por projeto ----
 

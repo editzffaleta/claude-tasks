@@ -69,7 +69,7 @@ test('a skill tem nome e descrição, e cada arquivo que ela cita existe', () =>
     if (anchor) assert.ok(anchorsOf(path.join(SKILL, ref)).has(decodeURIComponent(anchor.slice(1))), `${ref}${anchor}`);
   }
   for (const [, script] of skill.matchAll(/scripts\/(\w+\.mjs)/g)) assert.ok(fs.existsSync(path.join(SKILL, 'scripts', script)), script);
-  assert.deepEqual(fs.readdirSync(path.join(SKILL, 'referencias')).sort(), ['escolhendo-limites.md', 'escrevendo-descricoes.md', 'esquema.md', 'planta.md']);
+  assert.deepEqual(fs.readdirSync(path.join(SKILL, 'referencias')).sort(), ['escolhendo-limites.md', 'escrevendo-descricoes.md', 'esquema.md', 'planta.md', 'simulacao.md']);
 });
 
 test('as referências só apontam para arquivos e títulos que existem', () => {

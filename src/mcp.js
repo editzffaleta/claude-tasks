@@ -7,7 +7,7 @@ import { PROMPTS, complete, getPrompt } from './mcp/prompts.js';
 import { RESOURCE_TEMPLATES, listResources, readResource } from './mcp/resources.js';
 import { TOOLS } from './mcp/tools.js';
 
-const SERVER_INFO = { name: 'tarefas', title: 'Quadro de tarefas', version: '4.1.0' };
+const SERVER_INFO = { name: 'tarefas', title: 'Quadro de tarefas', version: '4.2.0' };
 const SUPPORTED_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
 const INSTRUCTIONS = `Central task board shared across ALL of the user's projects (dashboard: ${BOARD_URL}). Keep it current:

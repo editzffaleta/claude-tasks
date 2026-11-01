@@ -352,6 +352,7 @@ O quadro serve o mapa de cada projeto que tem pasta no computador, com o mesmo l
 - **Pedir atualização ao Claude** copia "Atualize o mapa do código deste projeto" para colar numa sessão do Claude Code na pasta do projeto.
 - **Abrir em outra aba** abre o mapa sozinho, em `/mapa/<id do projeto>/`, ainda com o login do quadro.
 - Quando o Claude refaz o mapa, ele se recarrega sozinho dentro da aba.
+- **Mapa | Simulação**, no começo da barra, alterna entre o mapa e a simulação de carga no Breakscale ([seção 7.7](#77-simulação-no-breakscale)). O número ao lado de Simulação é a quantidade de gargalos, em vermelho quando algum é urgente.
 
 ### 7.2 Tarefas ligadas aos arquivos
 
@@ -378,6 +379,7 @@ No mapa:
 | Item da **Revisão** (planta) | Criar tarefa no quadro | label `revisão`, com a decisão em aberto, o pedido pronto para resolvê-la e as peças envolvidas |
 | Parte ou arquivo de uma planta | Criar tarefa para construir | "Construir ‹nome›", label `construir`, com o pedido de **Construir isto** na descrição |
 | Parte, pasta, arquivo, endpoint ou função (botão direito ou painel lateral) | Criar tarefa sobre isto | um título que você escolhe (já vem com o nome do cartão) e uma descrição com o cartão e onde ele fica |
+| Gargalo da **Simulação** | Criar tarefa (ou Criar tarefas para todos) | o título do gargalo, label `simulação`, prioridade alta, média ou baixa conforme a urgência; na descrição, por que quebra, a sugestão e o link para o Breakscale |
 
 - Toda tarefa criada pelo mapa ganha também a label `mapa` e é registrada em seu nome. Depois de criar, o botão vira "Tarefa ‹código› criada", com link para ela.
 - **Sem duplicatas:** o mesmo problema da Saúde (ou o mesmo item da Revisão, a mesma peça a construir) vira uma tarefa só. Clicar de novo mostra "A tarefa ‹código› já existia", mesmo que ela já tenha sido concluída. Sobre um cartão qualquer, dá para criar quantas tarefas quiser. Em todos os casos vale a regra geral do quadro: não se cria uma tarefa aberta com o mesmo título no mesmo projeto.
@@ -394,7 +396,8 @@ O mapa segue os papéis do projeto (veja [SISTEMA.md § 8](SISTEMA.md#8-usuário
 | --- | --- | --- | --- | --- |
 | Ver o mapa, buscar, telas, fluxos, tour, Saúde e as tarefas ligadas; exportar uma cópia | ✓ | ✓ | ✓ | ✓ |
 | Perguntar ao mapa e pedir novos fluxos | — | ✓ | ✓ | ✓ |
-| Criar tarefas pelo mapa | — | ✓ | ✓ | ✓ |
+| Criar tarefas pelo mapa e pela Simulação | — | ✓ | ✓ | ✓ |
+| Ver a Simulação e baixar o modelo do Breakscale | ✓ | ✓ | ✓ | ✓ |
 | Alterar a planta (**Alterar** e **Desfazer**) | — | — | ✓ | ✓ |
 
 - Contas visualizadoras nunca perguntam ao mapa, nem com um papel maior no projeto.
@@ -409,7 +412,8 @@ Qualquer sessão do Claude com o MCP `tarefas` (e o chat do painel) pode consult
 - `overview`: o sistema de relance: as partes, os fluxos e o trabalho recente;
 - `find`: acha partes, arquivos, endpoints e símbolos (funções, classes) por nome ou texto;
 - `show`: um item com o que o usa e o que ele usa;
-- `path`: o caminho entre dois itens.
+- `path`: o caminho entre dois itens;
+- `simulacao`: a última simulação no Breakscale: os cenários, os gargalos (com a tarefa de cada um, se já existe), quantas premissas são estimativa e o link.
 
 É só leitura e responde em português (o `status` em texto, as outras ações com o JSON do mapa). Referência completa em [MCP.md](MCP.md#code_map).
 
@@ -422,8 +426,42 @@ Qualquer sessão do Claude com o MCP `tarefas` (e o chat do painel) pode consult
 | `GET /mapa/:id/` | A página do mapa, com login | leitura |
 | `GET /mapa/:id/api/quadro/tarefas` | Tarefas ligadas aos arquivos | leitura |
 | `POST /mapa/:id/api/quadro/tarefas` | Cria uma tarefa a partir do mapa | edição |
+| `GET /api/projects/:id/mapa/simulacao` | A última simulação (cenários, gargalos, premissas) e `tarefas`, o gargalo → a tarefa que já saiu dele. 404 sem simulação | leitura |
+| `GET /api/projects/:id/mapa/simulacao/arquivo` | Baixa o `simulacao.breakscale` | leitura |
+| `POST /api/projects/:id/mapa/simulacao/tarefas` | `{ "ids": ["pg"] }` (ou `{ "id": "pg" }`): transforma gargalos em tarefas, uma por gargalo | edição |
 
 As demais rotas em `/mapa/:id/api/` são a API própria da página do mapa (perguntar, fluxos, planta, exportar) e seguem a tabela da [seção 7.4](#74-permissões).
+
+### 7.7 Simulação no Breakscale
+
+O mapa mostra **como** o sistema se liga. A Simulação mostra **onde ele quebra** quando o tráfego sobe. Ela usa o [Breakscale](https://breakscale.tech), um simulador de arquitetura aberto (licença MIT, de xevrion): ele monta o sistema com servidores, bancos e filas, cada um com um número limitado de vagas e uma fila, e mede o que acontece com cada pedido simulado. Nada é desenhado para parecer plausível: ocupação, filas, latência e falhas vêm da simulação.
+
+**Como fazer.** Numa sessão do Claude Code (ou do Codex) na pasta do projeto, com o mapa pronto, peça:
+
+> Simule este projeto no Breakscale
+
+O Claude:
+
+1. monta um rascunho a partir do mapa (`breakscale.mjs rascunho`): as telas viram origens de tráfego, os servidores, processadores de fila, bancos, caches e filas viram componentes, e as ligações do mapa viram o caminho dos pedidos. Bibliotecas, testes e scripts ficam de fora, assim como as chamadas a serviços de fora (Stripe, e-mail, IA), que são explicadas em **Deixado de fora do modelo**;
+2. troca os números padrão do Breakscale pelos do código (tamanho do pool, réplicas, timeouts) e registra cada um como **premissa**, marcando o que veio do código e o que é estimativa;
+3. roda o simulador (`breakscale.mjs simular`) com 1×, 2×, 5× e 10× o tráfego de base. Na primeira vez o Claude Code pede aprovação para baixar o pacote `breakscale-mcp` pelo npx. Ele roda neste computador, numa versão fixa, e é pedida aprovação a cada simulação;
+4. escreve uma sugestão para cada gargalo e conta o resultado, dizendo quais números foram chute.
+
+**Na aba Simulação:**
+
+- **Onde o sistema quebra**: quando foi simulado, **Abrir no Breakscale** (o modelo abre em breakscale.tech, onde dá para arrastar o tráfego e derrubar peças), **Baixar arquivo .breakscale** (abre no site, em Settings › Open a file, e na extensão do VS Code) e **Pedir nova simulação ao Claude**, que copia o pedido;
+- **Gargalos**: o primeiro cenário em que cada componente deixa de aguentar (fica 90% ocupado ou mais, junta 10 pedidos na fila, recusa ou deixa pedidos esgotarem o tempo, ou falha em 1% ou mais). A urgência vem do tráfego: **Urgente** quebra com até 2× o tráfego de base, **Atenção** com até 5× e **Pode esperar** só com mais que isso. Cada um tem **Criar tarefa**; depois de criada, o botão mostra a tarefa e o status dela;
+- **Cenários**: pedidos por segundo chegando e atendidos, falhas, p95 e p99 de cada cenário, e o motivo das falhas;
+- **Ocupação de cada componente** em cada cenário, em laranja a partir de 70% e em vermelho a partir de 90%;
+- **Premissas** e **Deixado de fora do modelo**, fechados por padrão.
+
+**Os números são tão bons quanto as premissas.** Um gargalo calculado com o tráfego "chutado" é uma pista, não uma conclusão. A aba diz quantas premissas ainda são estimativa. Para melhorar, conte ao Claude o tráfego real ou aponte onde estão as métricas.
+
+**Testar uma alternativa.** Peça ("e se o banco tivesse uma réplica de leitura?"): o Claude muda o modelo, simula de novo e compara.
+
+**Onde roda.** Por padrão, o simulador roda neste computador e nada sai daqui. Só se você pedir, o Claude usa o servidor hospedado do Breakscale (`--remoto`), que recebe os nomes das peças, as ligações e os números, nunca o código. O link **Abrir no Breakscale** leva o modelo depois do `#` do endereço, parte que o navegador não envia a servidor nenhum.
+
+O passo a passo que o Claude segue está em [`referencias/simulacao.md`](../mapa/skills/mapa-do-codigo/referencias/simulacao.md).
 
 ---
 
@@ -532,6 +570,9 @@ O plugin grava em exatamente dois lugares do seu projeto: a pasta `mapa-do-codig
 | `servidor-nucleo.mjs` | O núcleo do servidor, o mesmo que o quadro usa para servir o mapa | Não |
 | `consulta.mjs` | Consulta o mapa pela linha de comando; o Claude, o Codex e o quadro também usam | Não |
 | `artefato.html` | Uma cópia para abrir no app Claude, só se você pediu | Não |
+| `simulacao-projeto.json` | Só depois de uma simulação: o modelo do Breakscale, as premissas, o que ficou de fora e as sugestões para os gargalos | **Sim** (ou peça ao Claude) |
+| `simulacao.json` | O resultado da última simulação: cenários, ocupação, gargalos | Não. Refeito a cada simulação |
+| `simulacao.breakscale` | O modelo completo, que abre em breakscale.tech e na extensão do VS Code | Não |
 | `<projeto>-mapa.html` | Uma cópia exportada, só se você exportou pelo Claude ou pelo Codex (o botão Exportar baixa o arquivo em vez disso) | Não |
 | `.cache/` | A varredura, as fichas de descrição, o que mudou na última atualização (`mudancas.json`), o endereço do servidor em execução e, numa planta, as últimas 20 versões do plano para o **Desfazer** (`history/`) | Não. Pode apagar, mas aí o Desfazer não tem para onde voltar |
 | `.gitignore` | Mantém a pasta inteira fora do git | Não |
@@ -590,9 +631,10 @@ git rm -r --cached mapa-do-codigo
 | Perguntar (Codex) | um `codex exec` no computador, com o seu login do ChatGPT, fora do seu histórico do Codex | a pergunta e os arquivos que o Codex decidir ler |
 | Alterar uma planta pelo mapa | igual a perguntar; depois o servidor grava só os arquivos do plano | o pedido e os arquivos que a IA decidir ler |
 | Perguntar (app Claude) | a sua conta no claude.ai | o mapa (nomes, descrições, estrutura), nunca o código-fonte. O Claude pergunta antes de publicar |
+| Simular no Breakscale (só quando você pede) | o pacote `breakscale-mcp` 0.1.1, baixado do npm pelo npx e rodando no seu computador | nada. Com `--remoto`, só se você pedir: o modelo (nomes das peças, ligações e números, nunca o código) vai para o servidor do Breakscale |
 | Exportar uma cópia | no seu computador: o servidor monta um arquivo HTML | nada. Você decide quem recebe o arquivo. Ele leva o mapa, mais a Saúde ou o trabalho recente só se você marcar, e nunca o caminho da pasta, os endereços dos repositórios ou o código-fonte |
 
-O plugin não tem analytics nem telemetria, não tem dependências para instalar nem scripts de instalação, e **não faz nenhuma chamada de rede por conta própria**. (O original tinha uma lista de espera opcional do "Floorplan Cloud"; ela foi removida nesta versão.) Os poucos links do mapa para documentação só abrem quando você clica.
+O plugin não tem analytics nem telemetria, não tem dependências para instalar nem scripts de instalação, e **não faz nenhuma chamada de rede por conta própria**. (O original tinha uma lista de espera opcional do "Floorplan Cloud"; ela foi removida nesta versão.) A única exceção é a simulação no Breakscale, que só roda quando você pede e que o Claude Code sempre pede para aprovar: ela baixa o simulador pelo npx e, com `--remoto`, manda o modelo ao servidor do Breakscale. Os poucos links do mapa para documentação só abrem quando você clica.
 
 ### 10.2 O servidor local e o quadro
 
@@ -779,6 +821,7 @@ Ele também para sozinho duas horas depois que a última aba fecha. O mapa dentr
 
 - **Floorplan** 0.6.0, de [Hayden Smith](https://github.com/haydenschmitty) ([github.com/haydenschmitty/floorplan](https://github.com/haydenschmitty/floorplan)), sob a licença MIT. O Mapa do código é uma tradução e adaptação dele: textos, mapa e scripts em português, nomes de arquivos em português, a lista de espera do "Floorplan Cloud" removida e a integração com o quadro acrescentada. A licença original está em [`mapa/LICENSE`](../mapa/LICENSE) e o aviso sobre a adaptação em [`mapa/AVISO.md`](../mapa/AVISO.md).
 - **[elkjs](https://github.com/kieler/elkjs)** 0.9.3, o motor de layout, sob a Eclipse Public License 2.0 ([licença](../mapa/skills/mapa-do-codigo/assets/vendor/elkjs-LICENSE.md)).
+- **[Breakscale](https://github.com/workersio/breakscale)**, de xevrion, sob a licença MIT: o simulador usado na Simulação. Nenhum código dele vem no plugin; o pacote `breakscale-mcp` é baixado do npm na hora de simular.
 - **Fontes Inter e JetBrains Mono**, sob a SIL Open Font License 1.1 ([Inter](../mapa/skills/mapa-do-codigo/assets/vendor/fonts/inter-LICENSE.txt), [JetBrains Mono](../mapa/skills/mapa-do-codigo/assets/vendor/fonts/jetbrains-mono-LICENSE.txt)).
 
 O motor de layout e as fontes ficam em `mapa/skills/mapa-do-codigo/assets/vendor/`, com as licenças, e cada montagem os copia para dentro do mapa.

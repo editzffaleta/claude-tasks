@@ -3,6 +3,10 @@
 // fora deste computador (o Floorplan Cloud foi retirado), uma lista fixa de programas que ele executa, e
 // arquivos de terceiros iguais às versões publicadas. Estes testes falham se algo disso mudar, para uma mudança
 // assim não passar despercebida. Se for de propósito, atualize este arquivo e o mapa/AVISO.md juntos.
+//
+// A única exceção é a simulação no Breakscale (scripts/breakscale.mjs), que só roda quando a pessoa pede e
+// fica fora da lista de comandos pré-aprovados, para ser aprovada a cada vez: ela roda o simulador pelo npx,
+// numa versão fixa do pacote breakscale-mcp, ou, só com --remoto, manda o modelo ao servidor do Breakscale.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -67,7 +71,10 @@ test('os únicos comandos pré-aprovados são os scripts da própria skill, e a 
   const granted = /^allowed-tools:\n((?: {2}- .*\n?)+)/m.exec(front + '\n')?.[1].trim().split('\n').map((l) => l.replace(/^\s*- /, '').trim());
   assert.deepEqual(granted, SCRIPTS.map((s) => `Bash(node \${CLAUDE_SKILL_DIR}/scripts/${s} *)`), `allowed-tools do SKILL.md: exatamente os scripts da skill. ${UPDATE}`);
   const scripts = fs.readdirSync(path.join(SKILL, 'scripts')).filter((n) => !fs.statSync(path.join(SKILL, 'scripts', n)).isDirectory()).sort();
-  assert.deepEqual(scripts, SCRIPTS, `lista de scripts/. ${UPDATE}`);
+  // breakscale.mjs baixa e roda o simulador do Breakscale (ou fala com o servidor dele): existe, mas de
+  // propósito não é pré-aprovado, para a pessoa ver e aprovar o comando cada vez que ele roda
+  assert.deepEqual(scripts, [...SCRIPTS, 'breakscale.mjs'].sort(), `lista de scripts/. ${UPDATE}`);
+  assert.doesNotMatch(front, /breakscale/, 'a simulação no Breakscale nunca é pré-aprovada');
 });
 
 test('nenhum pedido sai deste computador', () => {
@@ -82,7 +89,13 @@ test('nenhum pedido sai deste computador', () => {
   // todo pedido vai para o próprio servidor do mapa: caminhos relativos à página ou o endereço local salvo
   const LOCAL = /^(['"`](\/|\.\/|api\/)|s\.url \+)/;
   const calls = find(/\bfetch\(\s*([^,)]+)/).map((x) => ({ ...x, arg: x.m[1].trim() }));
-  assert.deepEqual(calls.filter((c) => !LOCAL.test(c.arg)).map((c) => `${c.file}: fetch(${c.arg}`), [], `pedidos que saem deste computador. ${UPDATE}`);
+  // a exceção: o cliente HTTP da simulação no Breakscale, usado só com --remoto
+  const outside = calls.filter((c) => !LOCAL.test(c.arg)).map((c) => `${c.file}: fetch(${c.arg}`);
+  assert.deepEqual(outside, ['scripts/lib/breakscale-mcp.mjs: fetch(url', 'scripts/lib/breakscale-mcp.mjs: fetch(url'], `pedidos que saem deste computador. ${UPDATE}`);
+  assert.match(read(path.join(SKILL, 'scripts', 'lib', 'breakscale.mjs')), /export const REMOTE_URL = 'https:\/\/mcp\.breakscale\.tech\/mcp';/);
+  const sim = read(path.join(SKILL, 'scripts', 'breakscale.mjs'));
+  assert.equal([...sim.matchAll(/httpClient\(/g)].length, 1, 'um só lugar fala com o servidor do Breakscale');
+  assert.match(sim, /const remote = !!args\.remoto;[\s\S]*if \(remote\) client = await httpClient\(/, 'e só com --remoto');
   assert.deepEqual(find(/\b(WebSocket|XMLHttpRequest|sendBeacon|importScripts)\b/).map((x) => `${x.file}: ${x.text}`), [], `outros jeitos de falar com um servidor. ${UPDATE}`);
   assert.deepEqual(find(/new EventSource\(\s*(?!['"`](\/|api\/))/).map((x) => `${x.file}:${x.line}`), [], 'a recarga ao vivo só vem do servidor local');
 
@@ -107,7 +120,9 @@ test('a página chama a API por caminhos relativos, para funcionar em / e montad
 
 test('executa uma lista fixa de programas, e nunca por um shell', () => {
   const importers = find(/from\s+['"](?:node:)?child_process['"]/).map((x) => x.file).sort();
-  assert.deepEqual(importers, ['assets/servidor-nucleo.mjs', 'assets/servidor.mjs', 'scripts/lib/common.mjs', 'scripts/open.mjs', 'scripts/refresh.mjs'], `arquivos que iniciam programas. ${UPDATE}`);
+  assert.deepEqual(importers, ['assets/servidor-nucleo.mjs', 'assets/servidor.mjs', 'scripts/lib/breakscale-mcp.mjs', 'scripts/lib/common.mjs', 'scripts/open.mjs', 'scripts/refresh.mjs'], `arquivos que iniciam programas. ${UPDATE}`);
+  // o simulador do Breakscale roda numa versão fixa do pacote, nunca na mais nova que estiver no npm
+  assert.match(read(path.join(SKILL, 'scripts', 'lib', 'breakscale.mjs')), /export const BREAKSCALE_PACKAGE = 'breakscale-mcp@\d+\.\d+\.\d+';\nexport const LOCAL_COMMAND = \['npx', '-y', BREAKSCALE_PACKAGE, '--stdio'\];/);
   // só spawn e execFileSync, que recebem um programa e seus argumentos (o .exec() de regex é só texto)
   const names = find(/import\s*\{([^}]*)\}\s*from\s+['"](?:node:)?child_process['"]/).flatMap((x) => x.m[1].split(',').map((n) => n.trim()));
   assert.deepEqual([...new Set(names)].sort(), ['execFileSync', 'spawn'], `funções de child_process usadas. ${UPDATE}`);
