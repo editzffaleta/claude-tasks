@@ -1285,7 +1285,7 @@ Assim o Claude já começa sabendo o que está pendente. Ele nunca bloqueia a se
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/zffaleta/.local/bin/node --no-warnings /Users/zffaleta/Developer/claude-tasks/bin/session-start.js",
+            "command": "/Users/voce/.local/bin/node --no-warnings /Users/voce/Developer/claude-tasks/bin/session-start.js",
             "timeout": 10
           }
         ]
