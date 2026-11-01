@@ -294,6 +294,14 @@ Depois:
 
 O `install` mata qualquer processo que já esteja ouvindo na porta antes de registrar o serviço.
 
+**App para Mac.** `app/macos/build.sh --install` monta o **Quadro de Tarefas.app** (Swift, AppKit e WebKit, sem dependências) e o instala em `~/Applications`. O app abre o painel num `WKWebView` com armazenamento persistente (o login fica guardado, separado do navegador) e:
+
+- antes de abrir, confere o painel (`GET /api/auth/me`; qualquer resposta HTTP conta). Sem resposta, roda `launchctl kickstart gui/<uid>/com.claude-tasks.dashboard`; se o serviço não está registrado, roda `bin/service.sh install` com o `NODE` e um `PATH` completo, e espera até 20 s;
+- abre no navegador padrão os links de outros endereços, salva downloads em `~/Downloads` (respostas com `Content-Disposition: attachment` ou que o WebKit não exibe) e abre em nova janela os links do próprio quadro com `target="_blank"`;
+- tem menus em português (Editar, Visualizar com `⌘R`, `⌘0`, `⌘+` e `⌘-`, Janela e Ajuda, com **Abrir o log do servidor**), sem usar as teclas dos atalhos do painel.
+
+O `build.sh` grava no `Info.plist` o endereço do painel (`ClaudeTasksURL`, de `CLAUDE_TASKS_URL` ou `CLAUDE_TASKS_PORT`), a pasta do repositório (`ClaudeTasksRepo`) e o Node (`ClaudeTasksNode`), desenha o ícone (`app/macos/Icone/gerar-icone.swift`) e assina o app localmente (ad hoc). `CLAUDE_TASKS_URL` no ambiente do app passa por cima do `Info.plist`, e `QUADRO_FOTO=<arquivo.png>` (com `QUADRO_FOTO_SAIR=1`) salva uma foto da janela depois de abrir, para testes sem olhar a tela.
+
 ### 3.4 Docker
 
 ```bash
