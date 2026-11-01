@@ -6,7 +6,7 @@ import { localDate } from './util.js';
 const params = new URLSearchParams(location.search);
 
 export const TASK_VIEWS = ['board', 'list', 'calendar', 'gantt'];
-export const PAGES = ['dashboard', 'activity', 'automations', 'team', 'organizations', 'settings', 'project-settings', 'account', 'admin'];
+export const PAGES = ['dashboard', 'activity', 'automations', 'team', 'organizations', 'settings', 'project-settings', 'account', 'admin', 'mapa'];
 
 export const state = {
   me: null,

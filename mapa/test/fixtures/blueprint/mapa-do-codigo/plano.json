@@ -1,0 +1,48 @@
+{
+  "$schema": "floorplan/plan@1",
+  "source": "docs/prd.md",
+  "stack": ["Sites em Next.js para os donos e os passeadores", "Servidor em Node.js + Express", "Banco de dados Postgres", "Stripe para pagamentos com cartão", "Postmark para e-mails"],
+  "assumptions": [
+    "Donos e passeadores usam o mesmo login, com os passeadores marcados como equipe.",
+    "O app do passeador é um site que funciona no celular, não um app nativo (app nativo está fora do escopo da v1)."
+  ],
+  "questions": [
+    { "question": "Os donos podem cancelar um passeio de graça? Até quando?", "about": ["POST /api/bookings/:id/cancel", "web/app/bookings/page.tsx"] }
+  ],
+  "files": [
+    { "path": "web/app/page.tsx", "name": "Página inicial", "description": "Lista os passeadores perto de você, com foto e preço.", "screen": "/", "uses": ["web/components/WalkerCard.tsx", "web/lib/api.ts"], "calls": ["GET /api/walkers"] },
+    { "path": "web/app/book/[walkerId]/page.tsx", "name": "Página de reserva", "description": "Mostra os horários livres de um passeador e deixa o dono escolher um e pagar.", "screen": "/book/:walkerId", "uses": ["web/lib/api.ts"], "calls": ["GET /api/walkers/:id/slots", "POST /api/bookings"] },
+    { "path": "web/app/bookings/page.tsx", "name": "Página Meus passeios", "description": "Os passeios futuros e passados do dono, com um botão de cancelar.", "screen": "/bookings", "uses": ["web/lib/api.ts"], "calls": ["GET /api/bookings", "POST /api/bookings/:id/cancel"] },
+    { "path": "web/app/login/page.tsx", "name": "Página de login", "description": "Entrar ou criar uma conta.", "screen": "/login", "uses": ["web/lib/api.ts"], "calls": ["POST /api/auth/login", "POST /api/auth/signup"] },
+    { "path": "web/components/WalkerCard.tsx", "name": "Card do passeador", "description": "A foto, o nome e o preço de um passeador, usados nas listas." },
+    { "path": "web/lib/api.ts", "name": "Conexão com o servidor", "description": "Como o site conversa com o servidor, mantendo o dono logado." },
+    { "path": "walker/app/schedule/page.tsx", "name": "Agenda de hoje", "description": "Os passeios do passeador hoje, com um botão para marcar cada um como feito.", "screen": "/schedule", "calls": ["GET /api/walker/schedule", "POST /api/walks/:id/complete"] },
+    { "path": "api/src/server.ts", "name": "Início do servidor", "description": "Liga o servidor e conecta cada grupo de endpoints.", "uses": ["api/src/routes/walkers.ts", "api/src/routes/bookings.ts", "api/src/routes/auth.ts", "api/src/routes/walks.ts", "api/src/routes/webhooks.ts", "api/src/routes/admin.ts"] },
+    { "path": "api/src/routes/walkers.ts", "name": "Endpoints de passeadores", "description": "Lista os passeadores e os horários livres deles.", "uses": ["api/src/db/walkers.ts"] },
+    { "path": "api/src/routes/bookings.ts", "name": "Endpoints de reservas", "description": "Reserva, lista e cancela passeios.", "uses": ["api/src/services/payments.ts", "api/src/db/bookings.ts"] },
+    { "path": "api/src/routes/auth.ts", "name": "Endpoints de login", "description": "Faz o login das pessoas e cria contas.", "uses": ["api/src/db/users.ts"] },
+    { "path": "api/src/routes/walks.ts", "name": "Endpoints da agenda do passeador", "description": "Os passeios de hoje de um passeador, e marcar um passeio como feito.", "uses": ["api/src/db/bookings.ts"] },
+    { "path": "api/src/routes/webhooks.ts", "name": "Mensagens do Stripe", "description": "Confirma uma reserva quando o Stripe avisa que o pagamento foi aprovado.", "uses": ["api/src/db/bookings.ts", "api/src/services/email.ts"] },
+    { "path": "api/src/routes/admin.ts", "name": "Endpoints da equipe", "description": "Remove um passeador que saiu." , "uses": ["api/src/db/walkers.ts"] },
+    { "path": "api/src/services/payments.ts", "name": "Pagamentos com cartão", "description": "Cobra e estorna cartões pelo Stripe.", "services": ["stripe"] },
+    { "path": "api/src/services/email.ts", "name": "E-mails", "description": "Envia confirmações de reserva e lembretes.", "services": ["postmark"] },
+    { "path": "api/src/db/bookings.ts", "name": "Reservas salvas", "description": "Lê e salva passeios.", "data": ["db"] },
+    { "path": "api/src/db/users.ts", "name": "Contas salvas", "description": "Lê e salva donos e passeadores.", "data": ["db"] },
+    { "path": "api/src/db/walkers.ts", "name": "Passeadores salvos", "description": "Lê e salva os perfis dos passeadores e os horários livres deles.", "data": ["db"] },
+    { "path": "api/src/lib/geo.ts", "name": "Cálculo de distância", "description": "Calcula a que distância um passeador está de um dono." },
+    { "path": "jobs/reminders.ts", "name": "Lembretes da noite", "description": "Toda noite, manda e-mail aos donos sobre os passeios do dia seguinte.", "uses": ["api/src/db/bookings.ts", "api/src/services/email.ts"] }
+  ],
+  "endpoints": [
+    { "method": "GET", "path": "/api/walkers", "file": "api/src/routes/walkers.ts", "name": "Listar passeadores", "description": "Passeadores perto do dono.", "access": "public" },
+    { "method": "GET", "path": "/api/walkers/:id/slots", "file": "api/src/routes/walkers.ts", "name": "Horários livres de um passeador", "description": "Quando um passeador está livre nesta semana.", "access": "public" },
+    { "method": "POST", "path": "/api/bookings", "file": "api/src/routes/bookings.ts", "name": "Reservar um passeio", "description": "Segura o horário e começa o pagamento com cartão.", "access": "signed-in" },
+    { "method": "GET", "path": "/api/bookings", "file": "api/src/routes/bookings.ts", "name": "Meus passeios", "description": "Os passeios do dono logado.", "access": "signed-in" },
+    { "method": "POST", "path": "/api/bookings/:id/cancel", "file": "api/src/routes/bookings.ts", "name": "Cancelar um passeio", "description": "Cancela um passeio e devolve o dinheiro, se for permitido.", "access": "signed-in" },
+    { "method": "POST", "path": "/api/auth/login", "file": "api/src/routes/auth.ts", "name": "Entrar", "description": "Confere o e-mail e a senha.", "access": "public", "publicBecause": "as pessoas precisam entrar antes de estarem logadas; 5 tentativas erradas bloqueiam a conta por 15 minutos" },
+    { "method": "POST", "path": "/api/auth/signup", "file": "api/src/routes/auth.ts", "name": "Criar uma conta", "description": "Cria uma conta de dono.", "access": "public" },
+    { "method": "GET", "path": "/api/walker/schedule", "file": "api/src/routes/walks.ts", "name": "Passeios de hoje", "description": "Os passeios de hoje do passeador logado.", "access": "signed-in", "who": "passeadores" },
+    { "method": "POST", "path": "/api/walks/:id/complete", "file": "api/src/routes/walks.ts", "name": "Marcar um passeio como feito", "description": "Registra que um passeio aconteceu.", "access": "signed-in", "who": "o passeador daquele passeio" },
+    { "method": "POST", "path": "/api/webhooks/stripe", "file": "api/src/routes/webhooks.ts", "name": "Pagamento aprovado", "description": "A mensagem do Stripe dizendo que um pagamento com cartão deu certo.", "access": "webhook" },
+    { "method": "DELETE", "path": "/api/walkers/:id", "file": "api/src/routes/admin.ts", "name": "Remover um passeador", "description": "Remove um passeador que saiu." }
+  ]
+}

@@ -170,3 +170,16 @@
 /* Com 10 colunas, a tabela rola na horizontal antes de espremer o título. */
 .task-table { min-width: 980px; }
 .task-table td.c-title { min-width: 300px; max-width: 520px; }
+
+/* ---------- mapa do código ---------- */
+.view-mapa { overflow: hidden; display: flex; flex-direction: column; }
+.view-mapa > .page { overflow: auto; }
+.mapa-barra { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 6px 20px; border-bottom: 1px solid var(--border); }
+.mapa-barra .btn svg, .mapa-barra .chip svg { width: 13px; height: 13px; }
+.mapa-frame { flex: 1; width: 100%; min-height: 0; border: 0; background: var(--bg); display: block; }
+.mapa-vazio p { line-height: 1.6; }
+.mapa-passos { display: grid; gap: 14px; padding-left: 20px; margin: 14px 0; }
+.mapa-passos .copy-row { margin-top: 6px; align-items: center; }
+.mapa-passos code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 6px 8px; border-radius: 6px; background: var(--panel-2); font: 12.5px var(--mono); }
+.mapa-passos small code { padding: 1px 5px; }
+@media (max-width: 640px) { .mapa-barra { padding: 6px 12px; } }

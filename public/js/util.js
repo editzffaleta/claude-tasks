@@ -327,6 +327,7 @@ export const ICON = {
   edit: svg('<path d="M10.5 2.5l3 3-8 8H2.5v-3z"/>'),
   building: svg('<rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 5h1M9 5h1M6 8h1M9 8h1M7 14v-3h2v3"/>'),
   layers: svg('<path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/>'),
+  map: svg('<path d="M1.8 4l4.1-1.8 4.2 1.8 4.1-1.8v9.6l-4.1 1.8-4.2-1.8-4.1 1.8z"/><path d="M5.9 2.2v9.6M10.1 4v9.6"/>'),
   share: svg('<circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="4" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M5.6 7.1l4.8-2.3M5.6 8.9l4.8 2.3"/>'),
   history: svg('<path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.6h2.6"/><path d="M8 5v3.2l2 1.3"/>'),
   shield: svg('<path d="M8 1.8l5 2v4.1c0 3-2.1 5.3-5 6.3-2.9-1-5-3.3-5-6.3V3.8z"/>'),

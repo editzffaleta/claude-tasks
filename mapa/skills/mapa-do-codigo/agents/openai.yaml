@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mapa do código"
+  short_description: "Desenha um mapa interativo deste código, em linguagem simples"
+  default_prompt: "Use $mapa-do-codigo para fazer o mapa do código deste projeto, ou atualizar o que já existe, e abra o mapa."

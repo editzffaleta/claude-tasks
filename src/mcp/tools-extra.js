@@ -4,6 +4,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { FIELD_TYPES, ROLES, ROLE_LABEL, cleanId, formatTask } from '../db.js';
 import { exportCsv, fetchJira, fetchTrello, importCsv, importJiraIssues, importTrelloBoard } from '../importers.js';
+import { mapStatus, queryMap } from '../mapa.js';
 import {
   CLAUDE, actingUser, boardLink, guardAdmin, guardProject, guardTask, me, projectFrom, requireProject, store, taskLink, userIds, visible,
 } from './context.js';
@@ -376,6 +377,42 @@ export const EXTRA_TOOLS = {
     },
   },
 
+  code_map: {
+    title: 'Mapa do código',
+    description: 'Look things up in a project\'s code map (made by the "mapa-do-codigo" plugin into the mapa-do-codigo/ folder): status, an overview of the parts, find a part/file/endpoint/function by name or text, show one item with what uses it and what it uses, or the path between two items. Use it before searching the code from scratch when the project has a map. To create or update the map, use the mapa-do-codigo skill ("faça o mapa do código"). Answers are in Portuguese.',
+    annotations: READ,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectProps,
+        action: { type: 'string', enum: ['status', 'overview', 'find', 'show', 'path'], description: 'Default status.' },
+        query: { type: 'string', description: 'find: text to look for · show: id, file path or "METHOD /path" of the item.' },
+        from: { type: 'string', description: 'path: starting item (id, file or endpoint).' },
+        to: { type: 'string', description: 'path: target item.' },
+      },
+    },
+    async run(args) {
+      const project = requireProject(args, { create: false, level: 'read' });
+      const s = mapStatus(project);
+      const action = args.action || 'status';
+      if (!s.available) return `${project.name}: ${s.reason}.`;
+      if (!s.exists) return `${project.name} ainda não tem mapa do código. Para criar, use o skill mapa-do-codigo na pasta ${project.path} ("faça o mapa do código deste projeto"). Depois ele aparece na aba "Mapa do código" do painel: ${boardLink(project)}&view=mapa`;
+      if (action === 'status') {
+        return [
+          `Mapa do código de ${project.name}${s.blueprint ? ' (planta: planejado a partir de um documento)' : ''}`,
+          `Pasta: ${s.folder}`,
+          `Gerado em ${s.generated_at?.slice(0, 16).replace('T', ' ') || '?'} pelo ${s.agent === 'codex' ? 'Codex' : 'Claude'}`,
+          `${s.parts ?? '?'} partes · ${s.files ?? '?'} arquivos · ${s.endpoints ?? 0} endpoints · ${s.screens ?? 0} telas`,
+          `Saúde: ${s.health.total} aviso(s), ${s.health.high} importante(s)${s.recent ? ` · ${s.recent} item(ns) de trabalho recente` : ''}`,
+          `No painel: ${boardLink(project)}&view=mapa`,
+        ].join('\n');
+      }
+      const cmd = { overview: ['overview'], find: ['find', args.query], show: ['show', args.query], path: ['path', args.from, args.to] }[action];
+      if (cmd.slice(1).some((x) => !String(x ?? '').trim())) throw new Error(action === 'path' ? 'Informe from e to' : 'Informe query');
+      return queryMap(project, cmd);
+    },
+  },
+
   show_in_dashboard: {
     title: 'Abrir no painel',
     description: 'Open a task, project or view on the user\'s dashboard screen (if it is open). Use when the user asks to "show" or "open" something.',
@@ -385,7 +422,7 @@ export const EXTRA_TOOLS = {
       properties: {
         task_id: { type: ['integer', 'string'] },
         ...projectProps,
-        view: { type: 'string', enum: ['board', 'list', 'calendar', 'gantt', 'dashboard', 'activity'] },
+        view: { type: 'string', enum: ['board', 'list', 'calendar', 'gantt', 'dashboard', 'activity', 'mapa'], description: 'mapa = the project\'s "Mapa do código" tab.' },
       },
     },
     run(args) {

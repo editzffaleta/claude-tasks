@@ -1,0 +1,22 @@
+{
+  "name": "mapa-do-codigo",
+  "version": "1.0.0",
+  "description": "Mapa do código: veja como o seu app se encaixa de verdade. Um mapa interativo do código em que cada parte, arquivo e pedido ao servidor tem um nome e uma descrição em português simples, com verificação de saúde, telas, fluxos guiados, perguntas respondidas no próprio mapa e destaque do que acabou de ser trabalhado. Integrado ao quadro de tarefas claude-tasks (aba “Mapa do código” de cada projeto). Versão em português, adaptada do Floorplan, de Hayden Smith (licença MIT).",
+  "author": {
+    "name": "Hayden Smith",
+    "url": "https://github.com/haydenschmitty"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mapa",
+    "código",
+    "arquitetura",
+    "visualização",
+    "diagrama",
+    "documentação",
+    "onboarding",
+    "codebase",
+    "architecture",
+    "map"
+  ]
+}

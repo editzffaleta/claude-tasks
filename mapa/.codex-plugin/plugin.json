@@ -1,0 +1,45 @@
+{
+  "name": "mapa-do-codigo",
+  "version": "1.0.0",
+  "description": "Mapa do código: veja como o seu app se encaixa de verdade. Um mapa interativo do código em que cada parte, arquivo e pedido ao servidor tem um nome e uma descrição em português simples, com verificação de saúde, telas, fluxos guiados, perguntas respondidas no próprio mapa e destaque do que acabou de ser trabalhado. Integrado ao quadro de tarefas claude-tasks (aba “Mapa do código” de cada projeto). Versão em português, adaptada do Floorplan, de Hayden Smith (licença MIT).",
+  "author": {
+    "name": "Hayden Smith",
+    "url": "https://github.com/haydenschmitty"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mapa",
+    "código",
+    "arquitetura",
+    "visualização",
+    "diagrama",
+    "documentação",
+    "onboarding",
+    "codebase",
+    "architecture",
+    "map"
+  ],
+  "skills": "./skills/",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "Mapa do código",
+    "shortDescription": "Veja como o seu app se encaixa",
+    "longDescription": "O Codex lê o seu código e desenha um mapa interativo dele. Cada parte, arquivo e pedido ao servidor ganha um nome e uma descrição em português simples, e todas as ligações entre eles aparecem. O mapa traz uma verificação de saúde (chaves expostas, endpoints que qualquer pessoa pode alterar), as telas do app, fluxos guiados, o destaque do que acabou de ser trabalhado e uma barra de perguntas que responde no próprio mapa, usando o seu login do Codex. Funciona também na aba “Mapa do código” do quadro de tarefas claude-tasks. Versão em português, adaptada do Floorplan, de Hayden Smith (licença MIT).",
+    "developerName": "Hayden Smith (Floorplan) · adaptação claude-tasks",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Faça o mapa do código deste projeto",
+      "Atualize o mapa do código com o que acabamos de mudar",
+      "Me mostre como o frontend fala com o backend"
+    ],
+    "composerIcon": "./.codex-plugin/icon.png",
+    "logo": "./.codex-plugin/icon.png",
+    "brandColor": "#111111",
+    "screenshots": []
+  }
+}

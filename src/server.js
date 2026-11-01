@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { BOARD_URL, PORT, Store } from './db.js';
 import { attachEngine, tick } from './engine.js';
 import { syncDueInboxes } from './inbox.js';
+import { closeMapServers, handleMapRoute } from './mapa.js';
 import { HttpError, buildRoutes } from './routes.js';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -181,7 +182,12 @@ const server = createServer(async (req, res) => {
       return res.end();
     }
     if (url.pathname.startsWith('/api/')) await api(req, res, url);
-    else await staticFile(res, url);
+    else if (url.pathname.startsWith('/mapa/')) {
+      // Mapa do código de um projeto (página e API própria, com o login do quadro).
+      const user = store.sessionUser(parseCookies(req)[COOKIE]);
+      const originAllowed = (origin) => hostAllowed(origin) || origin === req.headers.host;
+      if (!(await handleMapRoute({ store, req, res, url, user, originAllowed }))) await staticFile(res, url);
+    } else await staticFile(res, url);
   } catch (e) {
     const status = e.status || 500;
     if (status === 500) console.error(e);
@@ -209,6 +215,7 @@ setInterval(safeTick, 60000);
 
 function shutdown() {
   for (const c of clients) c.res.end();
+  closeMapServers();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2000).unref();
 }

@@ -1,0 +1,33 @@
+{
+  "$schema": "floorplan/architecture@1",
+  "project": { "name": "Pawprint", "summary": "Donos de cachorro reservam e pagam passeios com passeadores do bairro, e os passeadores acompanham o dia deles. Planejado a partir do PRD; nada foi construído ainda." },
+  "nodes": [
+    { "id": "web", "label": "Site dos clientes", "kind": "ui", "summary": "Onde os donos acham um passeador, reservam, pagam e cuidam dos passeios.", "paths": ["web/**"] },
+    { "id": "walker", "label": "App do passeador", "kind": "ui", "summary": "Onde os passeadores veem os passeios do dia e marcam cada um como feito.", "paths": ["walker/**"] },
+    { "id": "api", "label": "Servidor principal", "kind": "service", "summary": "Atende os dois apps, recebe os pagamentos e guarda os dados.", "paths": ["api/**"] },
+    { "id": "api.routes", "parent": "api", "label": "Endpoints", "kind": "feature", "summary": "Tudo o que os apps e o Stripe podem pedir ao servidor.", "paths": ["api/src/routes/**", "api/src/server.ts"] },
+    { "id": "api.services", "parent": "api", "label": "Pagamentos e e-mail", "kind": "library", "summary": "Conversa com o Stripe e o Postmark.", "paths": ["api/src/services/**"] },
+    { "id": "api.data", "parent": "api", "label": "Dados salvos", "kind": "data", "summary": "Lê e salva contas, passeadores e reservas.", "paths": ["api/src/db/**"] },
+    { "id": "jobs", "label": "Lembretes", "kind": "worker", "summary": "Manda e-mail aos donos na noite anterior a um passeio.", "paths": ["jobs/**"] },
+    { "id": "db", "label": "Banco de dados", "kind": "external", "summary": "Postgres, onde ficam as contas, os passeadores e as reservas." },
+    { "id": "stripe", "label": "Stripe", "kind": "external", "summary": "Cobra e estorna cartões." },
+    { "id": "postmark", "label": "Postmark", "kind": "external", "summary": "Envia e-mails." }
+  ],
+  "edges": [
+    { "from": "stripe", "to": "api/src/routes/webhooks.ts", "kind": "http", "label": "pagamento aprovado" }
+  ],
+  "flows": [
+    { "id": "book", "title": "Reservando um passeio", "steps": [
+      { "node": "web/app/book/[walkerId]/page.tsx", "note": "O dono escolhe um horário e paga" },
+      { "node": "api/src/routes/bookings.ts", "note": "O servidor segura o horário" },
+      { "node": "api/src/services/payments.ts", "note": "e pede ao Stripe para cobrar o cartão" },
+      { "node": "stripe", "note": "O Stripe faz a cobrança" },
+      { "node": "api/src/routes/webhooks.ts", "note": "O Stripe avisa que deu certo, então a reserva é confirmada" }
+    ] }
+  ],
+  "tour": [
+    { "node": "web", "title": "Onde os donos reservam", "note": "Os donos acham um passeador, escolhem um horário e pagam aqui." },
+    { "node": "api", "title": "O servidor principal", "note": "Os dois apps conversam com ele, e ele cuida dos pagamentos." },
+    { "node": "walker", "title": "Onde os passeadores trabalham", "note": "Os passeadores veem o dia deles e marcam os passeios como feitos." }
+  ]
+}

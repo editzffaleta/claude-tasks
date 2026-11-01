@@ -16,6 +16,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY src ./src
 COPY public ./public
 COPY bin ./bin
+# Núcleo do Mapa do código (o quadro serve o mapa de cada projeto com pasta montada no contêiner).
+COPY mapa ./mapa
 
 RUN mkdir -p /data && chown node:node /data
 USER node

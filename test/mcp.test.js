@@ -53,7 +53,7 @@ test('initialize e tools/list', async () => {
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   const list = await rpc('tools/list');
   assert.deepEqual(list.result.tools.map((t) => t.name).sort(), [
-    'add_comment', 'add_tasks', 'attach_file', 'complete_tasks', 'delete_tasks', 'export_tasks', 'get_activity',
+    'add_comment', 'add_tasks', 'attach_file', 'code_map', 'complete_tasks', 'delete_tasks', 'export_tasks', 'get_activity',
     'get_attachment', 'get_overview', 'get_task', 'import_tasks', 'list_members', 'list_notifications', 'list_projects',
     'list_tasks', 'log_time', 'manage_automations', 'manage_columns', 'manage_comment', 'manage_fields', 'manage_inbox',
     'manage_labels', 'manage_members', 'manage_project', 'manage_settings', 'manage_sprints', 'manage_workspaces',

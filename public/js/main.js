@@ -25,10 +25,12 @@ const LAZY = {
   settings: ['./settings.js', 'renderSettings'],
   'project-settings': ['./projectsettings.js', 'renderProjectSettings'],
   admin: ['./admin.js', 'renderAdmin'],
+  mapa: ['./mapa.js', 'renderMapa'],
 };
 const VIEWS = { board: renderBoard, list: renderList, calendar: renderCalendar, gantt: renderGantt };
 // Páginas com formulários próprios: não são redesenhadas a cada atualização ao vivo.
-const FORM_PAGES = new Set(['activity', 'automations', 'team', 'account', 'organizations', 'settings', 'project-settings', 'admin']);
+// O mapa se atualiza sozinho dentro do iframe; redesenhar a cada mudança do quadro o recarregaria.
+const FORM_PAGES = new Set(['activity', 'automations', 'team', 'account', 'organizations', 'settings', 'project-settings', 'admin', 'mapa']);
 let currentView = null;
 let lastProject;
 let renderSeq = 0;

@@ -999,6 +999,27 @@ const OPS = [
     body: ref('MemberInput'), res: arr(ref('Member')), perm: 'Gerente ou dono; dar o papel `owner` exige dono', desc: '`role` null remove a pessoa.',
   }],
 
+  // ===== mapa do código =====
+  ['GET', '/api/projects/{id}/mapa', T.projects, 'Situação do mapa do código do projeto', {
+    perm: PERM.read,
+    res: obj({
+      available: { type: 'boolean', description: 'O projeto tem uma pasta que existe neste computador' },
+      exists: { type: 'boolean', description: 'Já há um mapa em mapa-do-codigo/' },
+      reason: { type: 'string', description: 'Por que não dá para ter mapa (sem pasta)' },
+      folder: { type: 'string' }, generated_at: { type: ['string', 'null'] }, agent: { type: ['string', 'null'] },
+      blueprint: { type: 'boolean' }, files: { type: ['integer', 'null'] }, parts: { type: ['integer', 'null'] },
+      screens: { type: ['integer', 'null'] }, endpoints: { type: ['integer', 'null'] },
+      health: obj({ total: { type: 'integer' }, high: { type: 'integer' } }), recent: { type: 'integer' },
+    }),
+    desc: 'O mapa em si é servido em `/mapa/{id}/` (página com login) e a API dele em `/mapa/{id}/api/*`.',
+  }],
+  ['GET', '/api/projects/{id}/mapa/consulta', T.projects, 'Consultar o mapa do código', {
+    perm: PERM.read,
+    query: [q('arg', str, 'Argumentos da consulta, repetidos em ordem: `arg=find&arg=pedidos`, `arg=show&arg=<id>`, `arg=path&arg=<de>&arg=<para>`, `arg=overview`', true)],
+    res: obj({ text: { type: 'string', description: 'Resposta em JSON (texto), com ids' } }),
+    desc: 'A mesma consulta que a ferramenta `code_map` do MCP usa; roda o código do plugin sobre o `grafo.json` do projeto.',
+  }],
+
   // ===== colunas e fluxo =====
   ['GET', '/api/projects/{id}/columns', T.flow, 'Colunas do projeto', {
     res: arr(ref('Column')), perm: PERM.read, desc: 'Sem colunas próprias, devolve as 4 padrão (uma por status) com `id` null.',

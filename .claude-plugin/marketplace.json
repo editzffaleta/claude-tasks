@@ -1,0 +1,17 @@
+{
+  "name": "claude-tasks",
+  "owner": {
+    "name": "claude-tasks"
+  },
+  "metadata": {
+    "description": "Plugins do quadro de tarefas claude-tasks para o Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "mapa-do-codigo",
+      "source": "./mapa",
+      "description": "Mapa do código: um mapa interativo do seu código, em que cada parte, arquivo e pedido ao servidor tem um nome e uma descrição em português simples, com verificação de saúde, telas, fluxos guiados e destaque do trabalho recente. Adaptado do Floorplan, de Hayden Smith (licença MIT).",
+      "category": "productivity"
+    }
+  ]
+}

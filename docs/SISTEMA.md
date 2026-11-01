@@ -1,8 +1,8 @@
 # Quadro de Tarefas — Documentação do sistema
 
-> Versão 5 do esquema de dados · MCP 4.0.0 com 35 ferramentas · Node 22.13+ · sem dependências obrigatórias
+> Versão 5 do esquema de dados · MCP 4.1.0 com 36 ferramentas · Node 22.13+ · sem dependências obrigatórias
 
-Este documento descreve o sistema inteiro: o que ele faz, como está organizado, como instalar e operar (inclusive no Docker), como usar cada tela, as regras de negócio, as permissões, o modelo de dados, a API REST e a segurança. A referência completa do servidor MCP (as ferramentas que o Claude usa) está em [MCP.md](MCP.md). A referência interativa da API REST fica no próprio painel, em `/docs/api`.
+Este documento descreve o sistema inteiro: o que ele faz, como está organizado, como instalar e operar (inclusive no Docker), como usar cada tela, as regras de negócio, as permissões, o modelo de dados, a API REST e a segurança. A referência completa do servidor MCP (as ferramentas que o Claude usa) está em [MCP.md](MCP.md), e o guia do Mapa do código (o mapa interativo do código de cada projeto) está em [MAPA.md](MAPA.md). A referência interativa da API REST fica no próprio painel, em `/docs/api`.
 
 ## Sumário
 
@@ -16,7 +16,7 @@ Este documento descreve o sistema inteiro: o que ele faz, como está organizado,
 8. [Usuários, papéis e permissões](#8-usuários-papéis-e-permissões)
 9. [E-mail](#9-e-mail)
 10. [Importação e exportação](#10-importação-e-exportação)
-11. [Integração com o Claude](#11-integração-com-o-claude)
+11. [Integração com o Claude](#11-integração-com-o-claude), inclusive o [Mapa do código](#115-mapa-do-código)
 12. [Modelo de dados](#12-modelo-de-dados)
 13. [Migrações e backups](#13-migrações-e-backups)
 14. [API REST](#14-api-rest)
@@ -50,7 +50,8 @@ Ele foi inspirado no [Taskosaur](https://github.com/taskosaur/taskosaur) e hoje 
 - **Colaboração:** comentários em conversa com @menções, notificações por tipo e canal (painel, e-mail, macOS), links públicos de leitura.
 - **E-mail:** SMTP para convites, senha, notificações e automações; caixa de entrada IMAP por projeto que transforma e-mails em tarefas.
 - **Automação:** regras "quando X → faça Y" com 11 gatilhos e 12 ações, inclusive enviar e-mail e mover de sprint.
-- **IA:** MCP com 35 ferramentas, resources e 9 prompts; chat no painel com três provedores.
+- **IA:** MCP com 36 ferramentas, resources e 9 prompts; chat no painel com três provedores.
+- **Mapa do código:** plugin para Claude Code e Codex que desenha um mapa interativo do código de cada projeto, com verificação de saúde, telas, fluxos e trabalho recente; o quadro mostra o mapa numa aba, liga as tarefas aos arquivos e cria tarefas a partir dele ([MAPA.md](MAPA.md)).
 - **Operação:** tempo real (SSE), busca universal ⌘K, 5 idiomas, painel de administração com backups, API REST documentada em OpenAPI 3.1, Docker e CI.
 
 ---
@@ -85,6 +86,7 @@ Hook SessionStart (bin/session-start.js) ── lê o banco e injeta as pendênc
 - **Sem servidor obrigatório para o Claude.** O MCP grava direto no banco. O servidor do painel é necessário para visualizar e para o que é agendado: avisos de prazo, automações por tempo e sincronização das caixas de entrada.
 - **Motor de regras em todo processo.** Automações e notificações são ligadas por `attachEngine(store)` tanto no MCP quanto no servidor. Uma mudança feita pelo Claude também dispara as regras e as notificações.
 - **Front-end sem build.** O painel é feito de módulos JS nativos. As páginas maiores (dashboard, atividade, administração etc.) são carregadas sob demanda.
+- **Mapa do código.** O servidor também atende `/mapa/<id>/`, onde serve o mapa gerado na pasta do projeto com o núcleo do servidor do próprio plugin (ver [seção 11.5](#115-mapa-do-código)).
 
 ### 2.2 Tecnologias
 
@@ -107,13 +109,27 @@ Hook SessionStart (bin/session-start.js) ── lê o banco e injeta as pendênc
 
 ```
 claude-tasks/
+├── .claude-plugin/marketplace.json   este repositório como marketplace do Claude Code (claude-tasks)
+├── .agents/plugins/marketplace.json  o mesmo marketplace para o Codex
 ├── .github/workflows/ci.yml  testes (Node 22 e 24), sintaxe do painel, build e teste do contêiner
 ├── bin/
 │   ├── service.sh            instala/remove o LaunchAgent do painel
 │   └── session-start.js      hook SessionStart do Claude Code
 ├── docs/
 │   ├── SISTEMA.md            este documento
-│   └── MCP.md                referência do servidor MCP
+│   ├── MCP.md                referência do servidor MCP
+│   └── MAPA.md               guia do Mapa do código
+├── mapa/                     plugin Mapa do código (Claude Code e Codex), port do Floorplan 0.6.0
+│   ├── .claude-plugin/plugin.json · .codex-plugin/plugin.json   manifestos do plugin
+│   ├── LICENSE · AVISO.md    licença MIT do original e aviso da adaptação
+│   ├── skills/mapa-do-codigo/
+│   │   ├── SKILL.md          o roteiro que o Claude e o Codex seguem
+│   │   ├── scripts/          Node sem dependências: varredura, montagem, descrições,
+│   │   │                     atualização, plantas, trabalho recente, abrir
+│   │   ├── assets/           visualizador, servidor e consulta copiados para cada projeto;
+│   │   │                     vendor/ com o elkjs e as fontes
+│   │   └── referencias/      formatos e guias de escrita que a IA lê
+│   └── test/                 testes do plugin (rodam no npm test)
 ├── public/                   painel (servido como arquivos estáticos)
 │   ├── index.html            casca do painel
 │   ├── share.html            página do link público (/s/<token>)
@@ -147,6 +163,7 @@ claude-tasks/
 │       ├── settings.js       configurações gerais
 │       ├── admin.js          página Administração
 │       ├── share.js          página pública de leitura
+│       ├── mapa.js           aba Mapa do código
 │       └── chat.js           chat com o Claude
 ├── src/
 │   ├── db.js                 Store: esquema, migrações, projetos, colunas, transições, sprints,
@@ -171,6 +188,8 @@ claude-tasks/
 │   ├── inbox.js              caixa de entrada por projeto (e-mail → tarefa)
 │   ├── importers.js          CSV, Jira (CSV e API), Trello (JSON e API), sincronizações
 │   ├── chat.js               chat do painel: claude-cli, anthropic, openai
+│   ├── mapa.js               Mapa do código no quadro: rota /mapa/<id>/, situação, tarefas
+│   │                         ligadas aos arquivos, tarefas criadas pelo mapa, consulta
 │   ├── openapi.js            documento OpenAPI 3.1 (/api/openapi.json)
 │   ├── routes.js             rotas da API REST e guardas de permissão
 │   ├── server.js             HTTP: Host/Origin, cookies, SSE, estáticos, agendador
@@ -178,7 +197,7 @@ claude-tasks/
 │   └── mcp/
 │       ├── context.js        store do MCP, "eu", permissões (ENFORCE), formatadores
 │       ├── tools.js          24 ferramentas originais (ampliadas)
-│       ├── tools-extra.js    11 ferramentas da paridade com o Taskosaur
+│       ├── tools-extra.js    11 ferramentas da paridade com o Taskosaur e a code_map
 │       ├── resources.js      resources e templates
 │       └── prompts.js        prompts e autocompletar
 ├── test/
@@ -186,8 +205,9 @@ claude-tasks/
 │   ├── mcp.test.js           conversa com o MCP real via stdio
 │   ├── mail.test.js          SMTP, IMAP e MIME contra servidores falsos
 │   ├── permissions.test.js   papéis, visibilidade, links públicos, SSE, senha
-│   └── features.test.js      prefixos, prioridades, labels, campos, workflows, recorrência,
-│                             importação, caixa de entrada, segredos, busca
+│   ├── features.test.js      prefixos, prioridades, labels, campos, workflows, recorrência,
+│   │                         importação, caixa de entrada, segredos, busca
+│   └── mapa.test.js          Mapa do código no quadro: página, permissões, tarefas e consulta
 ├── Dockerfile · docker-compose.yml · .dockerignore
 ├── data/                     (ignorada pelo git) banco, anexos, avatares, secret.key, backups, log
 ├── package.json              scripts e a dependência opcional @anthropic-ai/sdk
@@ -639,7 +659,7 @@ A sessão dura 90 dias. Uma requisição sem sessão válida recarrega o painel 
   - Arquivados, recolhível.
   - Rodapé: Automações, Equipe, Organizações, Configurações e Administração (só administradores), seu nome (menu com Minha conta e preferências, Documentação da API e Sair) e o indicador "ao vivo".
 - **Cabeçalho:** nome do projeto, prefixo, selo de visibilidade (privado/público), pasta ou descrição, menu `⋯` do projeto, timer em execução, sino de notificações, botão do chat e **Nova tarefa** (os dois últimos somem para quem só lê).
-- **Barra de ferramentas:** abas (Quadro, Lista, Calendário, Gantt, Dashboard), seletor de sprint com engrenagem (dentro de um projeto), filtro de texto e Filtros.
+- **Barra de ferramentas:** abas (Quadro, Lista, Calendário, Gantt, Dashboard e, em projetos com pasta, [Mapa do código](#115-mapa-do-código)), seletor de sprint com engrenagem (dentro de um projeto), filtro de texto e Filtros.
 - **Menu do projeto `⋯`:** Configurações do projeto, Sprints, Link público de leitura (projetos públicos, gerentes), Exportar CSV, Copiar caminho e, para donos, Arquivar/Desarquivar e Excluir.
 
 A URL guarda o estado (`?project=4&view=gantt&sprint=2&task=47`, ou `?workspace=3`), então links abrem direto na tarefa.
@@ -1229,7 +1249,7 @@ Importar exige ser gerente ou dono do projeto de destino. Reimportar **atualiza*
 
 ### 11.1 MCP `tarefas`
 
-Servidor MCP local (stdio) registrado no escopo de usuário, disponível em todas as sessões do Claude Code de qualquer projeto. Tem 35 ferramentas, resources, 9 prompts (comandos `/mcp__tarefas__…`) e autocompletar. **Referência completa: [MCP.md](MCP.md).**
+Servidor MCP local (stdio) registrado no escopo de usuário, disponível em todas as sessões do Claude Code de qualquer projeto. Tem 36 ferramentas, resources, 9 prompts (comandos `/mcp__tarefas__…`) e autocompletar. **Referência completa: [MCP.md](MCP.md).**
 
 - **Quem é "eu":** `CLAUDE_TASKS_USER` (e-mail ou nome) ou, se o quadro tem uma única conta, essa conta.
 - **Permissões:** por padrão o MCP local tem acesso total (como o próprio arquivo do banco). Com `CLAUDE_TASKS_ENFORCE=1`, as ferramentas aplicam as permissões de "eu"; se "eu" não puder ser identificado, não há restrição.
@@ -1306,6 +1326,56 @@ claude -p "<mensagem>" --output-format stream-json --verbose --model <sonnet|opu
 - **Histórico:** fica em `chat_messages` (o painel mostra as últimas 60 mensagens; os provedores de API recebem as últimas 20 como contexto). "Nova conversa" apaga o histórico e a sessão da CLI.
 - **Passos:** os provedores de API fazem até 15 rodadas de ferramentas por mensagem.
 - **Cancelamento:** fechar a conexão encerra o processo da CLI.
+
+### 11.5 Mapa do código
+
+O Mapa do código é um plugin para Claude Code e Codex que desenha um mapa interativo do código de um projeto: partes, arquivos, endpoints, telas e as ligações entre eles, com nomes e descrições em português simples, verificação de saúde, fluxos e trabalho recente. É uma tradução e adaptação do [Floorplan](https://github.com/haydenschmitty/floorplan) 0.6.0 (MIT). O quadro mostra o mapa na aba **Mapa do código**, liga as tarefas aos arquivos e cria tarefas a partir dele. **Guia de uso completo: [MAPA.md](MAPA.md).**
+
+| Peça | Onde | Papel |
+| --- | --- | --- |
+| Plugin | `mapa/` (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `skills/mapa-do-codigo/`) | O skill que o Claude e o Codex seguem, os scripts Node sem dependências (varredura, montagem, descrições, atualização, plantas) e os arquivos copiados para cada projeto (visualizador, servidor, consulta) |
+| Marketplaces | `.claude-plugin/marketplace.json` (marketplace `claude-tasks`, plugin `mapa-do-codigo`, fonte `./mapa`) e `.agents/plugins/marketplace.json` (Codex) | Instalação a partir desta pasta: `claude plugin marketplace add ~/Developer/claude-tasks` e `claude plugin install mapa-do-codigo@claude-tasks` |
+| Mapa gerado | `<projeto>/mapa-do-codigo/` | `index.html`, `grafo.json`, `arquitetura.json`, `descricoes/`, `servidor.mjs`, `servidor-nucleo.mjs`, `consulta.mjs` e outros ([MAPA.md § 9](MAPA.md#9-arquivos-no-seu-projeto)); a pasta se ignora no git |
+| Integração | `src/mapa.js` | Rota `/mapa/<id>/`, situação do mapa, tarefas ligadas aos arquivos, tarefas criadas pelo mapa e consulta |
+| Aba | `public/js/mapa.js` | A aba no painel, só em projetos com pasta: instruções quando não há mapa, ou o mapa num iframe com **Pedir atualização ao Claude** e **Abrir em outra aba** |
+| MCP | `code_map` em `src/mcp/tools-extra.js` | Consulta ao mapa, só leitura ([MCP.md](MCP.md#code_map)) |
+| Testes | `mapa/test/*.test.mjs` (plugin) e `test/mapa.test.js` (integração) | Rodam no `npm test` |
+
+**Como o quadro serve o mapa.**
+
+- `src/server.js` entrega os caminhos `/mapa/…` a `handleMapRoute` antes dos arquivos estáticos. Sem sessão, redireciona para `/`; `/mapa/<id>` ganha a barra final (301). Projeto inexistente ou sem leitura mostra "Mapa não encontrado" (404), sem dizer qual dos dois.
+- O mapa é lido da pasta `mapa-do-codigo/` dentro de `projects.path`. Sem pasta, sem a pasta no disco ou sem `index.html`, a página explica o que falta e a API da página responde 404.
+- A página e a API dela usam `createMapServer({ root, mapDir, skillDir })` de `mapa/skills/mapa-do-codigo/assets/servidor-nucleo.mjs`, o mesmo núcleo do servidor autônomo (`node mapa-do-codigo/servidor.mjs`). Há um núcleo por projeto, recriado se a pasta do projeto muda e fechado no desligamento do servidor (`closeMapServers`).
+- `core.page({ board })` injeta em `window.FLOORPLAN_SERVER` o token da página e `board: { projectId, projectName, canEdit, canManage }`. Sem gestão, a chave **Alterar** da planta vem desligada. A API do núcleo exige o token (`x-floorplan-token`) e a mesma origem; uma cópia exportada não leva `board`.
+- `/mapa/<id>/api/*` vai para `core.handle(…, { allowAsk, allowChange, allowFlows, user })` (rotas `ask`, `cancel`, `flows`, `plan/undo`, `export`, `events`, `status` e `health`), exceto `api/quadro/tarefas`, que é do quadro. Com `user`, o **Parar** de cada pessoa só interrompe as perguntas dela. Fora `GET` e `HEAD`, todo pedido exige `Origin` permitido (403).
+- Cabeçalhos da página: `X-Frame-Options: SAMEORIGIN` (o painel a mostra num iframe), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` e `Referrer-Policy: same-origin`.
+- O iframe e o painel conversam por `postMessage` da mesma origem. O painel trata `mapa:abrir-tarefa` (abre o detalhe da tarefa) e `mapa:tarefa-criada` (recarrega o quadro); o mapa trata `mapa:tarefas-mudaram` (busca as tarefas de novo) e também as busca ao voltar a ficar visível. Fora do iframe, abrir uma tarefa abre `/?task=<id>` numa aba nova.
+- A aba não é redesenhada pelas atualizações ao vivo do quadro. O próprio mapa se recarrega quando `index.html` muda (o núcleo observa o arquivo e avisa as abas pelo stream de eventos).
+- `grafo.json` é lido com cache pela data de modificação.
+
+**Permissões** (papel efetivo no projeto, [seção 8](#8-usuários-papéis-e-permissões)):
+
+| Ação | Exige |
+| --- | --- |
+| Ver o mapa, Saúde, telas e fluxos; ver as tarefas ligadas; exportar; `GET /api/projects/:id/mapa` e `/mapa/consulta`; `code_map` | leitura |
+| Criar tarefas pelo mapa; pedir novos fluxos (`allowFlows`) | edição |
+| Perguntar ao mapa (`allowAsk`) | edição, e conta que não seja visualizadora |
+| Alterar a planta e desfazer (`allowChange`) | gestão |
+
+As perguntas rodam a CLI do Claude Code (ou o Codex) **no computador do quadro**, na pasta do projeto e com o login de quem mantém o quadro, sempre com ferramentas só de leitura. No Docker não há CLI, então perguntar não funciona; o resto do mapa funciona se a pasta do projeto estiver montada no contêiner no mesmo caminho (o `Dockerfile` copia `mapa/` para a imagem, sem `mapa/test`).
+
+**Tarefas ligadas aos arquivos** (`tasksOnMap`). Entram as tarefas do projeto abertas ou concluídas nos últimos 14 dias (até 2000). No título e na descrição, trechos com cara de caminho de arquivo (`src/db.js`, `db.js:120`, `web/app/page.tsx`) são comparados com os arquivos de `grafo.json`, sem diferenciar maiúsculas: um caminho com pasta liga ao arquivo igual e aos que terminam com `/<caminho>`; só o nome do arquivo liga quando um único arquivo do mapa tem esse nome. Tarefas criadas pelo mapa com origem `card` ou `construir` também ficam presas ao cartão de origem (lido do `external_id`). `GET /mapa/<id>/api/quadro/tarefas` devolve `{ tasks: [{ id, ref, title, status, priority, done, files, cards }] }`, só com as tarefas que citam algum arquivo ou têm cartão de origem. O mapa conta nos selos só as abertas.
+
+**Tarefas criadas pelo mapa** (`taskFromMap`). `POST /mapa/<id>/api/quadro/tarefas` recebe `{ title, description, priority, tags, origin: { kind, id } }`, com `kind` em `saude`, `revisao`, `construir` ou `card`:
+
+- grava `external_source = 'mapa'` e `external_id = '<kind>:<id>'`. Para `saude`, `revisao` e `construir`, se já existe uma tarefa do projeto com essa origem (aberta ou não), devolve ela com `duplicate: true`; para `card` não há essa trava (o `external_id` ganha um sufixo `#<momento>`), então um cartão pode ter várias tarefas. A regra geral de título duplicado vale em todos os casos;
+- tipo `bug` para `saude` com prioridade `high` e `task` nos demais casos; label `mapa` mais até 6 labels enviadas; prioridade enviada ou `medium`;
+- o ator é a pessoa logada (`{ author: 'user', user_id }`), então automações e notificações rodam como em qualquer tarefa criada no painel;
+- exige edição no projeto (403) e título (400).
+
+**Código do projeto.** O quadro nunca executa código que esteja na pasta de um projeto: a pasta pode ter vindo de qualquer lugar (um clone, por exemplo), e o quadro roda com a sua conta. O núcleo usa o código de consulta do próprio plugin (`querySource`, de `mapa/skills/mapa-do-codigo/assets/graph-query.js`), e a consulta da API e da `code_map` roda a CLI do plugin apontando para os dados do projeto (`MAPA_GRAFO_DIR`). Da pasta do projeto, o quadro só lê dados: `index.html`, `grafo.json` e os arquivos de fluxos e da planta. O `servidor.mjs` e o `consulta.mjs` gravados ali servem só para usar o mapa fora do quadro.
+
+**Consulta** (`queryMap`). `GET /api/projects/:id/mapa/consulta?arg=…` (até 6 `arg`) e a `code_map` rodam a CLI de consulta do plugin sobre o `mapa-do-codigo/grafo.json` do projeto, com limite de 30 s, e devolvem o texto (`{ text }` na API). `GET /api/projects/:id/mapa` devolve a situação: `available`, `reason`, `exists`, `folder`, `generated_at`, `agent`, `blueprint`, `files`, `parts`, `screens`, `endpoints`, `health: { total, high }` e `recent`.
 
 ---
 
@@ -1514,7 +1584,10 @@ Base: `http://localhost:4317/api`. A referência completa, com todos os campos, 
 | Configurações | `GET`/`PATCH /settings`, `POST /settings/test-email` | login para ler (resumo) / admin |
 | Administração | `GET /admin/overview`, `POST /admin/backup`, `GET`/`DELETE /admin/backups/:arquivo`, `POST /admin/maintenance` (`vacuum` ou `cleanup`) | admin |
 | Chat | `GET`/`DELETE /chat`, `POST /chat` (NDJSON) | login, exceto visualizadores |
+| Mapa do código | `GET /projects/:id/mapa` (situação), `GET /projects/:id/mapa/consulta?arg=…` (consulta, até 6 `arg`) | leitura |
 | Documentação | `GET /openapi.json` | público |
+
+Fora de `/api`, a página do mapa de cada projeto fica em `/mapa/:id/`, com a API própria em `/mapa/:id/api/…` (perguntar, fluxos, planta, exportar e `quadro/tarefas`), com login e as permissões da [seção 11.5](#115-mapa-do-código).
 
 ### 14.3 Campos de tarefa (POST e PATCH)
 
@@ -1555,6 +1628,7 @@ Base: `http://localhost:4317/api`. A referência completa, com todos os campos, 
 | E-mail | A senha SMTP/IMAP não é enviada sem TLS (exceto para `localhost` ou por escolha explícita) |
 | Chat | Nos três provedores, as ferramentas aplicam as permissões de quem conversa (`claude-cli`: o MCP filho recebe `CLAUDE_TASKS_USER` e `CLAUDE_TASKS_ENFORCE=1`; `anthropic` e `openai`: ferramentas executadas no servidor com essa pessoa). A CLI roda sem ferramentas internas (`--tools ""`) e só com o MCP do quadro. Visualizadores não usam o chat. |
 | MCP | Roda localmente, com o mesmo usuário do sistema, sem autenticação (quem pode rodar processos no Mac já pode ler o banco). Exclusões exigem `confirm: true`. `CLAUDE_TASKS_ENFORCE` aplica as permissões de "eu". Não há ferramenta para convites, papéis de conta ou senhas. |
+| Mapa do código | Página e API com o login e os papéis do quadro; gravações exigem `Origin` permitido; a página só abre em iframe da mesma origem (`SAMEORIGIN`); perguntas e alterações de planta rodam a IA com ferramentas só de leitura, e só o servidor grava os arquivos do plano. Detalhes na [seção 11.5](#115-mapa-do-código) e em [MAPA.md § 10](MAPA.md#10-privacidade-e-segurança). |
 | Perda de dados | Backup automático antes de cada migração, backup manual pela Administração, transações em toda gravação, conferência de chaves estrangeiras nas reconstruções |
 
 Não há limite de tentativas de login: em rede aberta, mantenha o painel atrás de um proxy ou VPN.
@@ -1565,7 +1639,7 @@ Não há limite de tentativas de login: em rede aberta, mantenha o painel atrás
 
 ```bash
 npm start   # painel em http://localhost:4317 (use outra porta para não brigar com o serviço)
-npm test    # 60 testes em 5 arquivos, com bancos temporários
+npm test    # 237 testes: 67 do quadro em 6 arquivos (test/, com bancos temporários) e 170 do plugin do Mapa do código em 19 arquivos (mapa/test/)
 npm run i18n:check   # confere os dicionários do painel (scripts/i18n.js)
 npm run mcp # servidor MCP no terminal (stdio)
 ```
@@ -1573,10 +1647,12 @@ npm run mcp # servidor MCP no terminal (stdio)
 | Arquivo | O que testa |
 | --- | --- |
 | `test/api.test.js` | Servidor real numa porta livre: primeiro acesso, Host/Origin, quadro completo, convites, automações |
-| `test/mcp.test.js` | MCP real via stdio: lista das 35 ferramentas e anotações, tarefas, projetos, sprints, tempo, anexos, resources, prompts, erros e o hook |
+| `test/mcp.test.js` | MCP real via stdio: lista das 36 ferramentas e anotações, tarefas, projetos, sprints, tempo, anexos, resources, prompts, erros e o hook |
 | `test/mail.test.js` | SMTP (AUTH, recusas, TLS obrigatório), IMAP (literais, limites, login) e MIME (codificações, multipart, anexos) contra servidores falsos |
 | `test/permissions.test.js` | Projetos privados, referências cruzadas, dono × gerente, automações de gerente, visualizador, comentários e menções, links públicos, workspaces aninhados, SSE, redefinição de senha |
 | `test/features.test.js` | Prefixos, 5 prioridades e pontos, labels, campos, transições, workflows, dependências, recorrência, velocidade, CSV, Jira, Trello, caixa de entrada, segredos, busca |
+| `test/mapa.test.js` | Mapa do código no quadro: situação sem e com mapa, login e iframe, visualizador e projeto privado, tarefas ligadas aos arquivos, tarefa da Saúde sem duplicar, várias tarefas presas a um cartão, permissões de perguntar e da planta, consulta pela API |
+| `mapa/test/*.test.mjs` | O plugin: leitura de código por linguagem e framework, Saúde e segredos, telas, plantas e alterações, servidor e perguntas (com CLIs falsas), exportação, celular e toque, tema, manifestos e marketplaces (`release.test.mjs`) e a cadeia de suprimentos (`supply-chain.test.mjs`: sem hooks, MCP, dependências nem pedidos para fora, e só os programas permitidos) |
 
 - **Rodar em paralelo ao serviço:** `CLAUDE_TASKS_DB=/tmp/teste.db CLAUDE_TASKS_PORT=4318 npm start`.
 - **Front-end sem build:** edite `public/` e recarregue a página.
@@ -1616,6 +1692,7 @@ npm run mcp # servidor MCP no terminal (stdio)
 | Sem notificações do macOS | desligadas nas Configurações, na sua matriz de notificações ou nos Ajustes do Sistema | ligue em Configurações e em Minha conta; permita "Script Editor/osascript" em Ajustes → Notificações |
 | "database is locked" | gravação muito longa concorrente | raro (há espera de 5 s); tente de novo |
 | Migração: "A migração deixou referências quebradas" | banco com dados inconsistentes | nada foi alterado (ROLLBACK); restaure o backup `backup-v<versão>-…` se precisar e corrija as linhas citadas |
+| Aba Mapa do código vazia, ou Perguntar não funciona no mapa | mapa feito fora da raiz do projeto, CLI não encontrada pelo serviço ou papel sem edição | veja [MAPA.md § 11](MAPA.md#11-solução-de-problemas) |
 | Esqueci a senha (única conta) | — | com SMTP, use "Esqueci a senha"; sem SMTP e sem outro administrador, pare o serviço e rode `sqlite3 data/tasks.db "DELETE FROM sessions; DELETE FROM users;"` para refazer o primeiro acesso (as tarefas são mantidas) |
 
 ---
@@ -1630,3 +1707,4 @@ npm run mcp # servidor MCP no terminal (stdio)
 - **Idiomas:** só o painel é traduzido; mensagens do servidor, e-mails, notificações e respostas do MCP são em português.
 - **Login sem limite de tentativas.**
 - **Fuso horário:** as datas de calendário usam o fuso do computador que roda o servidor e o MCP.
+- **Mapa do código:** só para projetos com pasta no computador do quadro; perguntar ao mapa depende da CLI do Claude Code ou do Codex nesse computador (não funciona no Docker), com o login de quem mantém o quadro.

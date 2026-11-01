@@ -1,0 +1,20 @@
+{
+  "name": "claude-tasks",
+  "interface": {
+    "displayName": "Quadro de tarefas (claude-tasks)"
+  },
+  "plugins": [
+    {
+      "name": "mapa-do-codigo",
+      "source": {
+        "source": "local",
+        "path": "./mapa"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

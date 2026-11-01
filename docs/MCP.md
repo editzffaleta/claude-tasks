@@ -1,6 +1,6 @@
 # MCP `tarefas` — Referência completa
 
-> Servidor MCP 4.0.0 do Quadro de Tarefas · 35 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
+> Servidor MCP 4.1.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
 
 O MCP `tarefas` é a ponte entre o Claude e o quadro central de tarefas. Com ele, o Claude registra, consulta, organiza e conclui tarefas de **qualquer projeto**, gerencia sprints, colunas, fluxos, labels, campos, membros, workspaces, automações e caixas de entrada, controla tempo, lê anexos, cria links públicos, importa e exporta tarefas e gera relatórios. Tudo vai para o mesmo banco do painel (http://localhost:4317).
 
@@ -28,7 +28,7 @@ A documentação do sistema como um todo (painel, regras de negócio, permissõe
 
 | Capacidade | O que oferece |
 | --- | --- |
-| **Tools** (35) | Tarefas, comentários, projetos, colunas e fluxos, sprints, tempo, anexos, visão geral, atividade, busca, equipe e papéis, organizações e workspaces, labels, campos personalizados, links públicos, notificações, automações, caixa de entrada, importação e exportação, configurações e "abrir no painel" |
+| **Tools** (36) | Tarefas, comentários, projetos, colunas e fluxos, sprints, tempo, anexos, visão geral, atividade, busca, equipe e papéis, organizações e workspaces, labels, campos personalizados, links públicos, notificações, automações, caixa de entrada, importação e exportação, configurações, "abrir no painel" e consulta ao mapa do código |
 | **Resources** | Conteúdo citável com `@` numa conversa: visão geral, minhas tarefas, quadro de cada projeto, qualquer tarefa |
 | **Prompts** (9) | Fluxos prontos que viram comandos no Claude Code: `/mcp__tarefas__proxima`, `/mcp__tarefas__planejar_sprint`… |
 | **Completions** | Autocompletar de projetos, tarefas e opções nos argumentos dos prompts e resources |
@@ -352,6 +352,7 @@ Legenda: 🔍 só leitura · ✏️ escreve · ⚠️ pode excluir. **Acesso** �
 | [`import_tasks`](#import_tasks) | Importar tarefas | ✏️ | gestão |
 | [`export_tasks`](#export_tasks) | Exportar tarefas | ✏️ | leitura |
 | [`show_in_dashboard`](#show_in_dashboard) | Abrir no painel | ✏️ | leitura |
+| [`code_map`](#code_map) | Mapa do código | 🔍 | leitura |
 | [`manage_settings`](#manage_settings) | Configurações do quadro | ✏️ | admin (`get`: livre) |
 
 Nos exemplos abaixo, `/Users/voce/Developer/Loja` é um repositório git qualquer.
@@ -1382,6 +1383,46 @@ E-mail (SMTP), provedor de IA, idioma padrão e endereço público ficam no pain
 
 ---
 
+### Mapa do código
+
+#### `code_map`
+
+Consulta o mapa do código de um projeto, o mapa interativo que o plugin `mapa-do-codigo` gera na pasta `mapa-do-codigo/` dele (guia completo em [MAPA.md](MAPA.md)). Serve para o Claude se localizar antes de vasculhar o código do zero. É só leitura e precisa de um mapa já feito: não cria nem atualiza o mapa (isso é com o skill `mapa-do-codigo`, pedindo "faça o mapa do código deste projeto"). Responde em português: `status` em texto, as outras ações com o JSON do mapa, cujos nomes e descrições estão em português.
+
+| Parâmetro | Tipo | Descrição |
+| --- | --- | --- |
+| `project_path` / `project` | string | Sem eles: o projeto da pasta da sessão |
+| `action` | enum | `status` (padrão), `overview`, `find`, `show` ou `path` |
+| `query` | string | `find`: o texto a procurar · `show`: id, caminho do arquivo ou `"MÉTODO /caminho"` do item |
+| `from` / `to` | string | `path`: o item de partida e o de chegada (id, arquivo ou endpoint) |
+
+| Ação | Responde |
+| --- | --- |
+| `status` | se há mapa, a pasta, quando e por quem foi gerado, partes, arquivos, endpoints e telas, os avisos da Saúde, o trabalho recente e o link da aba no painel |
+| `overview` | o sistema de relance: as partes, os fluxos e o trabalho recente |
+| `find` | partes, arquivos, endpoints e símbolos que combinam com `query` (até 15) |
+| `show` | o item, o que o usa e o que ele usa |
+| `path` | o caminho de ligações entre `from` e `to` |
+
+```json
+{ "project_path": "/Users/voce/Developer/Loja", "action": "find", "query": "pagamento" }
+```
+
+```
+Mapa do código de Loja
+Pasta: /Users/voce/Developer/Loja/mapa-do-codigo
+Gerado em 2026-10-31 18:40 pelo Claude
+6 partes · 142 arquivos · 18 endpoints · 9 telas
+Saúde: 3 aviso(s), 1 importante(s) · 5 item(ns) de trabalho recente
+No painel: http://localhost:4317/?project=4&view=mapa
+```
+
+- **Sem mapa:** a resposta explica como criar e onde ele vai aparecer no painel. **Projeto sem pasta:** diz que não há mapa possível.
+- `overview`, `find`, `show` e `path` rodam o `mapa-do-codigo/consulta.mjs` do projeto com o Node, na pasta do projeto, com limite de 30 s, e devolvem o JSON dele. Os ids têm a forma `n:<parte>`, `f:<caminho do arquivo>`, `r:<número do endpoint>` e `s:<arquivo>#<número>`; `show` e `path` também aceitam o caminho de um arquivo ou `"GET /caminho"`. A API REST oferece a mesma consulta em `GET /api/projects/:id/mapa/consulta` (ver [SISTEMA.md § 11.5](SISTEMA.md#115-mapa-do-código)).
+- Faltando `query` (ou `from` e `to`, em `path`), a ferramenta devolve erro.
+
+---
+
 ## 6. Resources
 
 Resources são documentos Markdown somente leitura que você cita numa conversa. No Claude Code, digite `@` e escolha, ou escreva diretamente:
@@ -1510,7 +1551,7 @@ As mensagens de erro são em português e dizem o que fazer. Por exemplo: `Colun
 
 | Método | Resposta |
 | --- | --- |
-| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.0.0, título "Quadro de tarefas"), `instructions` |
+| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.1.0, título "Quadro de tarefas"), `instructions` |
 | `notifications/initialized` | (notificação, sem resposta) |
 | `ping` | `{}` |
 | `tools/list` | `tools[]` com `name`, `title`, `description`, `inputSchema`, `annotations` |
@@ -1553,7 +1594,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 | `src/mcp.js` | Protocolo: leitura de linhas, roteamento de métodos (com ferramentas assíncronas), `instructions` |
 | `src/mcp/context.js` | Store compartilhado (com o motor de automações ligado), `me()`, permissões (`actingUser`, `guardProject`, `guardTask`, `visible`), resolução de projeto e pessoas, formatadores (`describeTask`, `projectBoard`, `overviewText`, `taskJson`) |
 | `src/mcp/tools.js` | As 24 ferramentas originais (ampliadas): esquema, anotações e `run()` |
-| `src/mcp/tools-extra.js` | As 11 ferramentas da paridade: comentários, labels, campos, membros, workspaces, links, busca, importação, exportação, painel e caixa de entrada |
+| `src/mcp/tools-extra.js` | As 11 ferramentas da paridade (comentários, labels, campos, membros, workspaces, links, busca, importação, exportação, painel e caixa de entrada) e a `code_map` (mapa do código) |
 | `src/mcp/resources.js` | Resources fixos, templates e leitura |
 | `src/mcp/prompts.js` | Os 9 prompts e o autocompletar |
 
@@ -1570,6 +1611,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 - **Links públicos.** `share_link` cria endereços que qualquer pessoa abre sem login (só leitura, sem e-mails nem tempo). Revogue com `action: "revoke"`.
 - **Segredos.** Senhas de IMAP e tokens de sincronização passados às ferramentas são cifrados no banco (AES-256-GCM, chave em `data/secret.key`) e nunca voltam nas respostas.
 - **Arquivos.** `attach_file`, `import_tasks` (`path`) e `export_tasks` (`path`) leem e gravam no caminho indicado com as permissões do seu usuário. `get_attachment` só lê arquivos que já estão em `data/attachments`.
+- **Mapa do código.** `code_map` só lê: roda a consulta do próprio plugin (nunca o `consulta.mjs` gravado na pasta do projeto, que poderia ter vindo de qualquer lugar) sobre o `mapa-do-codigo/grafo.json` do projeto, com o Node e limite de 30 s, e devolve o texto.
 - **Chat do painel.** Com o provedor `claude-cli`, usa este mesmo MCP com `--strict-mcp-config` e `--tools ""` (sem acesso a arquivos ou terminal), iniciado com `CLAUDE_TASKS_USER` e `CLAUDE_TASKS_ENFORCE=1`. Com os provedores de API, as ferramentas rodam dentro do servidor. Nos três casos valem as permissões de quem conversa.
 
 ---
@@ -1600,6 +1642,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 
 | Versão | Mudanças |
 | --- | --- |
+| **4.1** (Mapa do código) | +1 ferramenta: `code_map` (situação, visão geral, busca, detalhe e caminho no mapa do código de um projeto, feito pelo plugin `mapa-do-codigo`). `show_in_dashboard` aceita `view: "mapa"`. |
 | **4.0** (paridade com o Taskosaur) | +11 ferramentas: `manage_comment`, `manage_labels`, `manage_fields`, `manage_members`, `manage_workspaces`, `share_link`, `search`, `export_tasks`, `import_tasks`, `show_in_dashboard`, `manage_inbox`. Novos campos nas tarefas: prioridade `lowest`, `story_points`, `remaining`, `reporter`, `watchers`, `fields`, dependências com tipo, recorrência com `weekdays`/`monthday`/`count` e frequência `quarterly`, sprint `"next"`, códigos `WEB-12`. Filtros `reporter`, `watcher`, `tag`. `add_comment` com `reply_to` e menções. `manage_project` com prefixo, status, prioridade, visibilidade, datas e workspace. `manage_columns` com transições e workflows. `manage_sprints` com `cancel`. `manage_automations` com 4 gatilhos (`task_updated`, `sprint_started`, `sprint_completed`, `project_created`), 3 ações (`set_column`, `send_email`, `move_to_sprint`), condição `field` e variáveis `{ref}`/`{sprint}`. Permissões com `CLAUDE_TASKS_ENFORCE` e no chat do painel (os três provedores), com as mesmas regras da API. `send_notification` com o tipo `claude`. Ferramentas assíncronas. `openWorldHint: true` em `import_tasks` e `manage_inbox`; `export_tasks` deixa de ser só leitura. |
 | **3.0** | +14 ferramentas: `update_tasks`, `delete_tasks`, `add_comment`, `manage_project`, `manage_columns`, `timer`, `time_report`, `get_attachment`, `get_overview`, `get_activity`, `send_notification`, `list_notifications`, `manage_automations`, `manage_settings`. Anotações e títulos em todas. `format: json`. Novos parâmetros: `add_tags`/`remove_tags`, `add_blocked_by`/`remove_blocked_by`, `position`, `time_spent`, filtros `column`/`parent_id`/`sort`. "me" (`CLAUDE_TASKS_USER`). Resources, templates, 9 prompts e autocompletar. |
 | 2.0 | Prazos, subtarefas, dependências, sprints (`manage_sprints`), recorrência, tempo (`log_time`), anexos (`attach_file`), equipe (`list_members`), automações disparadas pelo MCP |

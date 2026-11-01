@@ -8,6 +8,7 @@ import { cleanId, forbid, now } from './db.js';
 import { exportCsv, fetchJira, fetchTrello, importCsv, importJiraIssues, importTrelloBoard, runSync } from './importers.js';
 import { deleteInbox, deleteRule, inboxConfig, listRules, saveInbox, saveRule, syncInbox, testInbox } from './inbox.js';
 import { mailEnabled, sendLater, testSmtp } from './mailer.js';
+import { mapStatus, queryMap } from './mapa.js';
 import { DEFAULT_SETTINGS } from './store/insights.js';
 import { NOTIFY_TYPES } from './store/team.js';
 
@@ -494,6 +495,18 @@ export function buildRoutes({ store, setSession, clearSession }) {
       guard(user, id(params[0]), 'manage');
       return { avatar: store.setAvatar('project', id(params[0]), { data: body, mime: req.headers['content-type'] }) };
     }, raw],
+
+    // Mapa do código do projeto (gerado pelo plugin na pasta mapa-do-codigo/).
+    ['GET', /^\/api\/projects\/(\d+)\/mapa$/, ({ params, user }) => {
+      guard(user, id(params[0]), 'read');
+      return mapStatus(store.project(id(params[0])));
+    }],
+    ['GET', /^\/api\/projects\/(\d+)\/mapa\/consulta$/, async ({ params, url, user }) => {
+      guard(user, id(params[0]), 'read');
+      const args = url.searchParams.getAll('arg').slice(0, 6);
+      if (!args.length) throw new HttpError(400, 'Informe o que consultar (arg=find&arg=termo)');
+      return { text: await queryMap(store.project(id(params[0])), args) };
+    }],
 
     ['GET', /^\/api\/projects\/(\d+)\/members$/, ({ params, user }) => {
       guard(user, id(params[0]), 'read');

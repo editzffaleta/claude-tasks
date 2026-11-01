@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node --no-warnings src/server.js",
     "mcp": "node --no-warnings src/mcp.js",
-    "test": "node --no-warnings --test test/*.test.js",
+    "test": "node --no-warnings --test test/*.test.js mapa/test/*.test.mjs",
     "i18n:check": "node scripts/i18n.js"
   },
   "optionalDependencies": {

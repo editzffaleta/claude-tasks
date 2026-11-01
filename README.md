@@ -11,7 +11,8 @@ Roda só com o Node 22.13+ (SQLite embutido, `node:sqlite`), sem dependências o
 ## Documentação
 
 - **[docs/SISTEMA.md](docs/SISTEMA.md):** arquitetura, instalação (launchd e Docker), conceitos e regras, papéis e permissões, guia de cada tela, automações, notificações, e-mail, importação, chat, modelo de dados, migrações, segurança e solução de problemas.
-- **[docs/MCP.md](docs/MCP.md):** referência do servidor MCP 4.0 (35 ferramentas, resources, prompts, permissões, Docker).
+- **[docs/MCP.md](docs/MCP.md):** referência do servidor MCP 4.1 (36 ferramentas, resources, prompts, permissões, Docker).
+- **[docs/MAPA.md](docs/MAPA.md):** guia do Mapa do código: instalação, primeiro mapa, plantas, cada botão do mapa, integração com o quadro, privacidade e solução de problemas.
 - **API REST:** documento OpenAPI 3.1 em `/api/openapi.json` e referência navegável em http://localhost:4317/docs/api.
 
 ## Funcionalidades
@@ -27,6 +28,7 @@ Roda só com o Node 22.13+ (SQLite embutido, `node:sqlite`), sem dependências o
 | Automação | Regras "quando X → faça Y" com 11 gatilhos (inclusive sprint e projeto) e 12 ações (inclusive mover de coluna/sprint e enviar e-mail), que valem para você, a equipe e o Claude |
 | Importação | CSV (ida e volta), Jira (CSV e API) e Trello (JSON e API), com sincronizações salvas |
 | IA | O Claude usa o MCP em qualquer sessão; o painel tem um chat com a CLI do Claude Code (sua assinatura), a API da Anthropic ou qualquer API compatível com OpenAI (OpenRouter, Ollama…) |
+| Mapa do código | Plugin para Claude Code e Codex que desenha um mapa interativo do código de cada projeto (partes, arquivos, endpoints, telas e ligações, em português simples), com verificação de saúde, fluxos, perguntas e trabalho recente; aba no painel, tarefas presas aos arquivos que citam e tarefas criadas a partir do mapa ([guia](docs/MAPA.md)) |
 | Operação | Tempo real (SSE), 5 idiomas, preferências por pessoa, painel de administração com backups e manutenção, segredos cifrados, Docker e CI |
 
 Atalhos no painel: `⌘K` busca e comandos, `N` nova tarefa, `/` filtro, `C` chat, `1`–`5` troca de visão, `Esc` fecha.
@@ -82,6 +84,17 @@ docker compose up -d        # http://localhost:4317, dados no volume "tarefas-da
   `docker exec -i <contêiner> node --no-warnings src/mcp.js` como comando do MCP (melhor no Mac).
   Detalhes em [docs/SISTEMA.md](docs/SISTEMA.md#34-docker).
 
+### Opcional: Mapa do código
+
+Um mapa interativo do código de cada projeto, que aparece na aba **Mapa do código** do painel. Instale o plugin uma vez:
+
+```bash
+claude plugin marketplace add ~/Developer/claude-tasks
+claude plugin install mapa-do-codigo@claude-tasks
+```
+
+Depois, numa sessão nova do Claude Code na pasta do projeto, peça "faça o mapa do código deste projeto" (e, mais tarde, "atualize o mapa do código"). No Codex, use `codex plugin marketplace add ~/Developer/claude-tasks` e instale "Mapa do código" em Plugins. Tudo sobre o mapa em [docs/MAPA.md](docs/MAPA.md).
+
 ### Opcional: pendências no início de cada sessão
 
 Adicione em `~/.claude/settings.json`:
@@ -131,7 +144,7 @@ Cloudflare Tunnel).
 
 ```bash
 npm start   # painel em http://localhost:4317
-npm test    # 60 testes: API, MCP, e-mail, permissões e funcionalidades, com bancos temporários
+npm test    # 237 testes: os do quadro (API, MCP, e-mail, permissões, funcionalidades, mapa) e os do plugin do mapa
 npm run i18n:check   # confere os dicionários de idiomas do painel (scripts/i18n.js)
 npm run mcp # servidor MCP no terminal
 ```

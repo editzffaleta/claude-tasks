@@ -21,6 +21,8 @@ const TABS = [
   ['calendar', N_('Calendário'), ICON.calendar],
   ['gantt', N_('Gantt'), ICON.gantt],
   ['dashboard', N_('Dashboard'), ICON.dashboard],
+  // Só em projetos com pasta no computador (o mapa é gerado dentro dela).
+  ['mapa', N_('Mapa do código'), ICON.map],
 ];
 // Grupos recolhidos na barra lateral (por workspace), guardados no navegador.
 const collapsed = new Set(JSON.parse((() => { try { return localStorage.getItem('tk_collapsed') || '[]'; } catch { return '[]'; } })()));
@@ -446,7 +448,7 @@ async function showNotifications(anchor) {
 function renderToolbar() {
   const bar = $('#toolbar');
   const taskView = TASK_VIEWS.includes(state.view);
-  const show = taskView || (state.view === 'dashboard' && state.projectId);
+  const show = taskView || (state.view === 'dashboard' && state.projectId) || state.view === 'mapa';
   bar.hidden = !show && state.view !== 'dashboard';
   if (bar.hidden) return;
   const p = currentProject();
@@ -460,7 +462,7 @@ function renderToolbar() {
   }
   bar.innerHTML = `
     <div class="tabs" role="tablist">
-      ${TABS.map(([v, label, icon]) => `<button role="tab" class="tab ${state.view === v ? 'on' : ''}" data-view="${v}" aria-selected="${state.view === v}">${icon}<span>${t(label)}</span></button>`).join('')}
+      ${TABS.filter(([v]) => v !== 'mapa' || p?.path).map(([v, label, icon]) => `<button role="tab" class="tab ${state.view === v ? 'on' : ''}" data-view="${v}" aria-selected="${state.view === v}">${icon}<span>${t(label)}</span></button>`).join('')}
     </div>
     <span class="spacer"></span>
     ${p && taskView ? `
