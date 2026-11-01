@@ -96,9 +96,9 @@ Ele registra pendências sozinho e responde a pedidos como estes:
 Os prompts do servidor também viram comandos no Claude Code, como `/mcp__tarefas__pendencias`,
 `/mcp__tarefas__planejar_sprint` e `/mcp__tarefas__triagem`.
 
-### No navegador
+### No navegador ou no app do Mac
 
-O painel em http://localhost:4317 mostra tudo ao vivo: o que o Claude grava aparece em menos de um
+O painel em http://localhost:4317 (ou no [app para Mac](#app-para-mac), com ícone próprio no Dock) mostra tudo ao vivo: o que o Claude grava aparece em menos de um
 segundo, sem recarregar a página. Você cria, arrasta e edita tarefas, organiza sprints, acompanha o
 dashboard e convida a equipe.
 
@@ -319,8 +319,9 @@ flowchart LR
 
 - **Node.js 22.13 ou mais novo.**
 - **Claude Code** (a CLI `claude`), para o MCP e para o chat do painel no provedor padrão.
-- **macOS** para o serviço que mantém o painel ligado (launchd) e para as notificações do sistema. Em
-  outros sistemas, rode com `npm start` ou com Docker.
+- **macOS** para o serviço que mantém o painel ligado (launchd), para as notificações do sistema e para
+  o app. Em outros sistemas, rode com `npm start` ou com Docker.
+- **Ferramentas de linha de comando do Xcode** (`xcode-select --install`), só para montar o app do Mac.
 - **Opcional:** servidor SMTP, caixa IMAP e chave de API da Anthropic ou de um provedor compatível com a
   OpenAI.
 
@@ -358,6 +359,32 @@ Depois:
 
 Para atualizar: `git pull` e `launchctl kickstart -k gui/$(id -u)/com.claude-tasks.dashboard`. Para
 remover o serviço: `bin/service.sh uninstall`.
+
+### App para Mac
+
+<img src="docs/imagens/icone-app.png" alt="Ícone do app Quadro de Tarefas" width="96" align="right" />
+
+Um app nativo, o **Quadro de Tarefas.app**, abre o painel numa janela própria, com ícone no Dock, no
+Launchpad e no Spotlight. Para montar e instalar em `~/Applications`:
+
+```bash
+~/Developer/claude-tasks/app/macos/build.sh --install
+```
+
+- **Liga o quadro sozinho.** Se o painel não responde, o app liga o serviço do launchd e, se ele nem
+  estiver instalado, roda o `bin/service.sh install`. Enquanto isso, mostra "Ligando o quadro…".
+- **Parece um app do Mac:** tema claro ou escuro do sistema, menus em português, copiar e colar,
+  `⌘R` recarrega, `⌘+` e `⌘-` mudam o tamanho do texto, tela cheia e a janela volta no mesmo lugar.
+- **Links e downloads:** links para fora (GitHub, Breakscale) abrem no navegador padrão, e
+  downloads (CSV, `.breakscale`, anexos) vão para a pasta Downloads. Links do próprio quadro que abrem
+  em outra aba, como o mapa, viram uma nova janela do app.
+- **Login guardado:** você entra uma vez e o app lembra. Os cookies do app são separados dos do navegador.
+- Se o painel não ligar, a janela mostra o motivo, **Tentar de novo** e **Abrir o log do servidor**.
+
+O app é Swift puro (AppKit e WebKit), em [`app/macos/`](app/macos), sem dependências. O `build.sh`
+guarda no app o endereço do painel, a pasta do repositório e o caminho do Node (um app aberto pelo Dock
+não tem o PATH do Terminal). Se mudar o claude-tasks de pasta ou trocar o Node, monte de novo. Para outro
+endereço: `CLAUDE_TASKS_URL=http://localhost:4400 app/macos/build.sh --install`.
 
 ### Docker
 
@@ -497,6 +524,7 @@ claude-tasks/
 ├── public/              o painel: HTML, CSS e módulos JS sem build
 │   └── js/i18n/         dicionários en, es, fr e de (as chaves são o texto em português)
 ├── mapa/                o plugin Mapa do código (Claude Code e Codex)
+├── app/macos/           o app para Mac (Swift: AppKit e WebKit) e o build.sh que monta o .app
 ├── bin/                 serviço do launchd e hook de início de sessão
 ├── test/                testes do quadro (node:test)
 ├── docs/                SISTEMA.md, MCP.md, MAPA.md e as imagens deste README
