@@ -108,7 +108,7 @@ Adicione em `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/zffaleta/.local/bin/node --no-warnings /Users/zffaleta/Developer/claude-tasks/bin/session-start.js",
+            "command": "/Users/voce/.local/bin/node --no-warnings /Users/voce/Developer/claude-tasks/bin/session-start.js",
             "timeout": 10
           }
         ]
@@ -158,3 +158,7 @@ Variáveis principais: `CLAUDE_TASKS_DB` (banco), `CLAUDE_TASKS_PORT` (padrão 4
 
 A CI (`.github/workflows/ci.yml`) roda os testes no Node 22 e 24, confere os dicionários e a sintaxe
 do painel e constrói e testa a imagem Docker.
+
+## Licença
+
+[MIT](LICENSE). O plugin em `mapa/` é uma adaptação do [Floorplan](https://github.com/haydenschmitty/floorplan), de Hayden Smith, também sob a licença MIT: a licença original e o aviso sobre a adaptação estão em [`mapa/LICENSE`](mapa/LICENSE) e [`mapa/AVISO.md`](mapa/AVISO.md).
