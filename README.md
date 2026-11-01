@@ -301,7 +301,7 @@ flowchart LR
     M --> D[("data/tasks.db<br/>SQLite, WAL")]
     W --> D
     W -. "a cada minuto" .-> T["Agendador<br/>prazos, automações,<br/>caixas de entrada"]
-    W -- "/mapa/&lt;projeto&gt;/" --> P["mapa-do-codigo/<br/>na pasta do projeto"]
+    W -- "/mapa/id-do-projeto/" --> P["mapa-do-codigo/<br/>na pasta do projeto"]
 ```
 
 - **Um banco, vários processos.** O painel e cada sessão do MCP gravam no mesmo SQLite (modo WAL). O
