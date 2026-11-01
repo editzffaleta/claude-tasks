@@ -1,10 +1,11 @@
 // Visão Quadro (kanban): colunas do projeto (ou as 4 categorias), arrastar entre e dentro das colunas.
 import { api, toast } from './api.js';
 import { openTask } from './drawer.js';
-import { state, filteredTasks, load, userById, currentProject } from './state.js';
+import { t, tn } from './i18n.js';
+import { state, filteredTasks, load, userById, currentProject, can, canWrite, labelFor } from './state.js';
 import { openNewTask } from './taskform.js';
 import {
-  $, $$, COLUMN_LABEL, ICON, STATUSES, avatar, dueInfo, esc, fmtDuration, prioIcon, projectColor, statusIcon, typeIcon,
+  $, $$, COLUMN_LABEL, ICON, STATUSES, avatar, columnLabel, dueInfo, esc, fmtDuration, fmtNumber, prioIcon, projectBadge, statusIcon, taskRef, typeIcon,
 } from './util.js';
 
 let drag = null;
@@ -12,57 +13,74 @@ export const boardDragging = () => !!drag;
 
 function boardColumns() {
   if (state.projectId && state.columns) {
-    return state.columns.map((c) => ({ key: c.id != null ? `c${c.id}` : c.status, ref: c.id ?? c.status, name: c.name, status: c.status, color: c.color }));
+    return state.columns.map((c) => ({ key: c.id != null ? `c${c.id}` : c.status, ref: c.id ?? c.status, name: columnLabel(c.name, c.status), status: c.status, color: c.color }));
   }
   return STATUSES.map((s) => ({ key: s, ref: s, name: COLUMN_LABEL[s], status: s }));
 }
 
-function columnOf(t, cols) {
-  if (state.projectId && t.column_id) {
-    const c = cols.find((col) => col.key === `c${t.column_id}`);
+function columnOf(task, cols) {
+  if (state.projectId && task.column_id) {
+    const c = cols.find((col) => col.key === `c${task.column_id}`);
     if (c) return c.key;
   }
-  return cols.find((c) => c.status === t.status)?.key;
+  return cols.find((c) => c.status === task.status)?.key;
 }
 
-export function cardHtml(t, { showProject = !state.projectId } = {}) {
-  const due = dueInfo(t, state.today);
-  const people = t.assignee_ids.map(userById).filter(Boolean);
-  const spent = t.spent_minutes || 0;
-  const classes = ['card', t.status === 'done' && 'done', t.id === state.taskId && 'selected', t.archived_at && 'archived'].filter(Boolean).join(' ');
+// Label colorida (cor da label cadastrada; sem cadastro, chip neutro).
+export function tagChip(tag, project_id) {
+  const l = labelFor(tag, project_id);
+  return `<span class="chip tag ${l?.color ? 'colored' : ''}" ${l?.color ? `style="--c:${esc(l.color)}"` : ''}>${esc(tag)}</span>`;
+}
+
+export function cardHtml(x, { showProject = !state.projectId } = {}) {
+  const due = dueInfo(x, state.today);
+  const people = x.assignee_ids.map(userById).filter(Boolean);
+  const spent = x.spent_minutes || 0;
+  const classes = ['card', x.status === 'done' && 'done', x.id === state.taskId && 'selected', x.archived_at && 'archived'].filter(Boolean).join(' ');
+  const project = { name: x.project_name, color: x.project_color, avatar: state.projects.find((p) => p.id === x.project_id)?.avatar };
   return `
-    <article class="${classes}" draggable="true" data-id="${t.id}" tabindex="0">
+    <article class="${classes}" draggable="${can(x.project_id, 'edit')}" data-id="${x.id}" tabindex="0">
       <div class="card-top">
-        ${prioIcon(t.priority)}${typeIcon(t.type)}<span class="tid">#${t.id}</span>
-        ${t.open_blockers ? `<span class="flag blocked" title="Bloqueada por ${t.open_blockers} tarefa(s)">${ICON.blocked}</span>` : ''}
-        ${t.timer_running ? `<span class="flag timer" title="Timer rodando">${ICON.clock}</span>` : ''}
-        ${t.recurrence ? `<span class="flag" title="Recorrente">${ICON.repeat}</span>` : ''}
+        ${prioIcon(x.priority)}${typeIcon(x.type)}<span class="tid">${esc(taskRef(x))}</span>
+        ${x.open_blockers ? `<span class="flag blocked" title="${esc(tn(x.open_blockers, 'Bloqueada por {n} tarefa', 'Bloqueada por {n} tarefas'))}">${ICON.blocked}</span>` : ''}
+        ${x.timer_running ? `<span class="flag timer" title="${esc(t('Timer rodando'))}">${ICON.clock}</span>` : ''}
+        ${x.recurrence ? `<span class="flag" title="${esc(t('Recorrente'))}">${ICON.repeat}</span>` : ''}
         <span class="spacer"></span>
-        ${t.source === 'claude' ? `<span class="by claude" title="Criada pelo Claude">${ICON.claude}</span>` : ''}
+        ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Criada pelo Claude'))}">${ICON.claude}</span>` : ''}
+        ${x.source === 'e-mail' ? `<span class="by" title="${esc(t('Criada por e-mail'))}">${ICON.mail}</span>` : ''}
         ${people.length ? `<span class="avatars">${people.slice(0, 3).map((u) => avatar(u, { size: 18 })).join('')}</span>` : ''}
       </div>
-      ${t.parent_id ? `<div class="parent-ref">${ICON.subtask}${esc(t.parent_title || `#${t.parent_id}`)}</div>` : ''}
-      <h3>${esc(t.title)}</h3>
+      ${x.parent_id ? `<div class="parent-ref">${ICON.subtask}${esc(x.parent_title || `#${x.parent_id}`)}</div>` : ''}
+      <h3>${esc(x.title)}</h3>
       <div class="card-meta">
-        ${showProject ? `<span class="chip"><span class="dot" style="--c:${projectColor(t)}"></span>${esc(t.project_name)}</span>` : ''}
-        ${due ? `<span class="chip due ${due.cls}" title="${due.title}">${ICON.calendar}${due.text}</span>` : ''}
-        ${t.tags.map((tag) => `<span class="chip tag">${esc(tag)}</span>`).join('')}
-        ${t.subtask_count ? `<span class="meta-icon ${t.subtask_done === t.subtask_count ? 'complete' : ''}" title="Subtarefas">${ICON.subtask}${t.subtask_done}/${t.subtask_count}</span>` : ''}
-        ${t.note_count ? `<span class="meta-icon" title="Comentários">${ICON.comment}${t.note_count}</span>` : ''}
-        ${t.attachment_count ? `<span class="meta-icon" title="Anexos">${ICON.clip}${t.attachment_count}</span>` : ''}
-        ${spent || t.estimate_minutes ? `<span class="meta-icon ${t.estimate_minutes && spent > t.estimate_minutes ? 'over' : ''}" title="Tempo gasto / estimado">${ICON.clock}${fmtDuration(spent)}${t.estimate_minutes ? `/${fmtDuration(t.estimate_minutes)}` : ''}</span>` : ''}
+        ${showProject ? `<span class="chip">${projectBadge(project)}${esc(x.project_name)}</span>` : ''}
+        ${due ? `<span class="chip due ${due.cls}" title="${esc(due.title)}">${ICON.calendar}${due.text}</span>` : ''}
+        ${x.story_points != null ? `<span class="chip points" title="${esc(t('Story points'))}">${fmtNumber(x.story_points)} ${t('pts')}</span>` : ''}
+        ${x.tags.map((tag) => tagChip(tag, x.project_id)).join('')}
+        ${x.subtask_count ? `<span class="meta-icon ${x.subtask_done === x.subtask_count ? 'complete' : ''}" title="${esc(t('Subtarefas'))}">${ICON.subtask}${x.subtask_done}/${x.subtask_count}</span>` : ''}
+        ${x.note_count ? `<span class="meta-icon" title="${esc(t('Comentários'))}">${ICON.comment}${x.note_count}</span>` : ''}
+        ${x.attachment_count ? `<span class="meta-icon" title="${esc(t('Anexos'))}">${ICON.clip}${x.attachment_count}</span>` : ''}
+        ${spent || x.estimate_minutes ? `<span class="meta-icon ${x.estimate_minutes && spent > x.estimate_minutes ? 'over' : ''}" title="${esc(t('Tempo gasto / estimado'))}">${ICON.clock}${fmtDuration(spent)}${x.estimate_minutes ? `/${fmtDuration(x.estimate_minutes)}` : ''}</span>` : ''}
       </div>
     </article>`;
+}
+
+// Fluxo do projeto: para quais colunas a tarefa pode ir (null = qualquer uma).
+function allowedTargets(task, cols) {
+  if (!state.projectId || !state.transitions?.length) return null;
+  const from = task.column_id ?? state.columns?.find((c) => c.status === task.status)?.id;
+  const ok = new Set([`c${from}`]);
+  for (const r of state.transitions) if (r.from_column_id === from) ok.add(`c${r.to_column_id}`);
+  return new Set(cols.filter((c) => ok.has(c.key)).map((c) => c.key));
 }
 
 export function renderBoard(el) {
   if (!state.projects.length) {
     el.innerHTML = `
       <div class="welcome">
-        <h2>O quadro está vazio</h2>
-        <p>Quando o Claude deixar algo pendente em qualquer projeto, a tarefa aparece aqui sozinha.
-        Você também pode pedir numa sessão: <code>anota isso no quadro de tarefas</code>.</p>
-        <button class="btn primary" data-new>${ICON.plus} Criar a primeira tarefa</button>
+        <h2>${t('O quadro está vazio')}</h2>
+        <p>${t('Quando o Claude deixar algo pendente em qualquer projeto, a tarefa aparece aqui sozinha. Você também pode pedir numa sessão:')} <code>${t('anota isso no quadro de tarefas')}</code>.</p>
+        ${canWrite() ? `<button class="btn primary" data-new>${ICON.plus} ${t('Criar a primeira tarefa')}</button>` : ''}
       </div>`;
     el.onclick = (e) => { if (e.target.closest('[data-new]')) openNewTask(); };
     return;
@@ -70,8 +88,9 @@ export function renderBoard(el) {
   const cols = boardColumns();
   const tasks = filteredTasks();
   const buckets = Object.fromEntries(cols.map((c) => [c.key, []]));
-  for (const t of tasks) buckets[columnOf(t, cols)]?.push(t);
-  const filtered = state.q || state.prio || state.type || state.assignee || state.due;
+  for (const x of tasks) buckets[columnOf(x, cols)]?.push(x);
+  const filtered = state.q || state.prio || state.type || state.assignee || state.due || state.tag;
+  const writer = canWrite();
 
   const scroll = Object.fromEntries($$('.column', el).map((c) => [c.dataset.key, $('.cards', c).scrollTop]));
   const scrollLeft = $('.board', el)?.scrollLeft || 0;
@@ -84,9 +103,10 @@ export function renderBoard(el) {
           <div class="column" data-key="${col.key}" data-ref="${col.ref}" data-status="${col.status}">
             <div class="column-head">
               ${statusIcon(col.status)}<h2>${esc(col.name)}</h2><span class="count">${list.length}</span>
-              <button class="icon-btn" data-add="${col.ref}" title="Nova tarefa em “${esc(col.name)}”" aria-label="Nova tarefa em ${esc(col.name)}">${ICON.plus}</button>
+              ${points(list) ? `<span class="col-points" title="${esc(t('Story points'))}">${fmtNumber(points(list))} ${t('pts')}</span>` : ''}
+              ${writer ? `<button class="icon-btn" data-add="${col.ref}" title="${esc(t('Nova tarefa em “{name}”', { name: col.name }))}" aria-label="${esc(t('Nova tarefa em “{name}”', { name: col.name }))}">${ICON.plus}</button>` : ''}
             </div>
-            <div class="cards">${list.map((t) => cardHtml(t)).join('') || `<div class="empty-col">${filtered ? 'Nada com esse filtro' : 'Nada aqui'}</div>`}</div>
+            <div class="cards">${list.map((x) => cardHtml(x)).join('') || `<div class="empty-col">${filtered ? t('Nada com esse filtro') : t('Nada aqui')}</div>`}</div>
           </div>`;
       }).join('')}
     </div>`;
@@ -109,20 +129,23 @@ export function renderBoard(el) {
   el.ondragstart = (e) => {
     const card = e.target.closest('.card');
     if (!card) return;
-    drag = { id: Number(card.dataset.id) };
+    const task = state.tasks.find((x) => x.id === Number(card.dataset.id));
+    if (!task || !can(task.project_id, 'edit')) return e.preventDefault();
+    drag = { id: task.id, allowed: allowedTargets(task, cols) };
+    if (drag.allowed) $$('.column', el).forEach((c) => c.classList.toggle('no-drop', !drag.allowed.has(c.dataset.key)));
     card.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', card.dataset.id);
   };
   el.ondragend = () => {
-    $$('.dragging, .drop', el).forEach((n) => n.classList.remove('dragging', 'drop'));
+    $$('.dragging, .drop, .no-drop', el).forEach((n) => n.classList.remove('dragging', 'drop', 'no-drop'));
     $$('.drop-line', el).forEach((n) => n.remove());
     drag = null;
     if (state.pendingRender) { state.pendingRender = false; renderBoard(el); }
   };
   el.ondragover = (e) => {
     const col = e.target.closest('.column');
-    if (!col || !drag) return;
+    if (!col || !drag || drag.allowed?.has(col.dataset.key) === false) return;
     e.preventDefault();
     $$('.column.drop', el).forEach((c) => c !== col && c.classList.remove('drop'));
     col.classList.add('drop');
@@ -139,12 +162,15 @@ export function renderBoard(el) {
     const col = e.target.closest('.column');
     if (!col || !drag) return;
     e.preventDefault();
+    if (drag.allowed?.has(col.dataset.key) === false) { drag = null; return toast(t('O fluxo deste projeto não permite mover para essa coluna'), true); }
     const id = drag.id;
     const index = dropIndex(col, e.clientY);
     drag = null;
     moveCard(el, id, cols, cols.find((c) => c.key === col.dataset.key), buckets[col.dataset.key], index);
   };
 }
+
+const points = (list) => list.reduce((n, x) => n + (x.story_points || 0), 0);
 
 function cardsIn(col) {
   return $$('.card:not(.dragging)', col);
@@ -170,9 +196,9 @@ function placeLine(col, y) {
 }
 
 async function moveCard(el, id, cols, col, list, index) {
-  const task = state.tasks.find((t) => t.id === id);
+  const task = state.tasks.find((x) => x.id === id);
   if (!task) return;
-  const siblings = list.filter((t) => t.id !== id);
+  const siblings = list.filter((x) => x.id !== id);
   const patch = {};
   const sameColumn = columnOf(task, cols) === col.key;
   if (state.projectId && !sameColumn) patch.column = col.ref;
@@ -192,7 +218,7 @@ async function moveCard(el, id, cols, col, list, index) {
   renderBoard(el);
   try {
     await api(`/api/tasks/${id}`, { method: 'PATCH', body: patch });
-    if (patch.status === 'done' || col.status === 'done') toast(`#${id} concluída`);
+    if (patch.status === 'done' || col.status === 'done') toast(t('{ref} concluída', { ref: taskRef(task) }));
   } catch (e) {
     toast(e.message, true);
   }
@@ -200,4 +226,4 @@ async function moveCard(el, id, cols, col, list, index) {
 }
 
 // Usado quando o projeto atual mudou de colunas e precisa de rótulo (lista, detalhe).
-export const columnName = (t) => (state.projectId && currentProject() && t.column_name) || COLUMN_LABEL[t.status];
+export const columnName = (task) => (state.projectId && currentProject() && task.column_name ? columnLabel(task.column_name, task.status) : COLUMN_LABEL[task.status]);

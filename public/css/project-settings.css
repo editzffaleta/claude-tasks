@@ -1,0 +1,209 @@
+/* project-settings: página de configurações do projeto (public/js/projectsettings.js).
+   Tudo sob .project-settings; os diálogos da página também recebem essa classe. */
+
+/* ---------- estrutura: navegação lateral + conteúdo ---------- */
+.project-settings .ps-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; align-items: start; }
+.project-settings .ps-nav { position: sticky; top: 4px; display: grid; gap: 2px; }
+.project-settings .ps-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: left;
+  white-space: nowrap;
+}
+.project-settings .ps-nav-item svg { width: 15px; height: 15px; color: var(--text-3); }
+.project-settings .ps-nav-item:hover { background: var(--hover); color: var(--text); }
+.project-settings .ps-nav-item.on { background: var(--accent-weak); color: var(--accent); font-weight: 550; }
+.project-settings .ps-nav-item.on svg { color: currentColor; }
+.project-settings .ps-nav-item.danger { margin-top: 6px; }
+.project-settings .ps-nav-item.danger.on { background: var(--critical-weak); color: var(--critical); }
+.project-settings .ps-body { display: grid; gap: 16px; min-width: 0; }
+
+/* ---------- utilitários de texto e espaçamento ---------- */
+.project-settings p.hint { display: flex; }
+.project-settings .ps-gap { margin-bottom: 12px; }
+.project-settings .ps-gap-top { margin-top: 12px; }
+.project-settings .ps-text { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+.project-settings .ps-subhead { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.project-settings .ps-nowrap { white-space: nowrap; }
+.project-settings .ps-break { overflow-wrap: anywhere; }
+.project-settings .ps-grow { flex: 1; min-width: 0; }
+.project-settings .ps-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.project-settings .notice svg { width: 14px; height: 14px; vertical-align: -2px; }
+.project-settings .ps-notice { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0; }
+.project-settings .ps-notice > span { flex: 1; min-width: 220px; }
+.project-settings .ps-error { margin: 0 0 10px; display: flex; gap: 6px; align-items: flex-start; color: var(--critical); font-size: 12.5px; overflow-wrap: anywhere; }
+.project-settings .ps-error svg { width: 14px; height: 14px; margin-top: 1px; }
+.project-settings td .ps-error { margin: 4px 0 0; }
+.project-settings .ps-howto { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 4px; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+
+/* Link com cara de botão (exportar CSV). */
+.project-settings a.btn { text-decoration: none; color: var(--text); width: fit-content; }
+
+/* Botões dentro do título do cartão não herdam o ícone apagado do h3. */
+.project-settings .card-box h3 .btn svg { width: 14px; height: 14px; color: inherit; }
+.project-settings .card-box h3 .icon-btn svg { color: inherit; }
+
+/* Formulário só-leitura: <fieldset disabled> sem a moldura padrão. */
+.project-settings .ps-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.project-settings .ps-fieldset:disabled .swatch span { cursor: default; opacity: 0.7; }
+.project-settings .ps-span-2 { grid-column: span 2; }
+
+/* ---------- geral ---------- */
+.project-settings .ps-avatar-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.project-settings .ps-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  flex: none;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--c, var(--panel-2));
+  color: #fff;
+  font-size: 22px;
+  font-weight: 650;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.project-settings .ps-avatar-actions { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.project-settings .ps-key { font-family: var(--mono); text-transform: uppercase; }
+.project-settings .ps-path { overflow-wrap: anywhere; }
+.project-settings .ps-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.project-settings .ps-choice { position: relative; display: block; cursor: pointer; }
+.project-settings .ps-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.project-settings .ps-choice > span {
+  display: grid;
+  gap: 3px;
+  height: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  transition: border-color 0.12s, background 0.12s;
+}
+.project-settings .ps-choice b { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.project-settings .ps-choice b svg { width: 14px; height: 14px; color: var(--text-3); }
+.project-settings .ps-choice small { font-size: 12px; color: var(--text-3); line-height: 1.4; }
+.project-settings .ps-choice:hover > span { border-color: var(--border-strong); }
+.project-settings .ps-choice input:checked + span { border-color: var(--accent); background: var(--accent-weak); }
+.project-settings .ps-choice input:checked + span b svg { color: var(--accent); }
+.project-settings .ps-choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.project-settings .ps-choice input:disabled + span { cursor: default; opacity: 0.65; }
+
+/* ---------- membros ---------- */
+.project-settings .ps-roles { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.project-settings .ps-roles > div { padding: 8px 10px; border-radius: 8px; background: var(--panel-2); }
+.project-settings .ps-roles dt { font-size: 12.5px; font-weight: 600; }
+.project-settings .ps-roles dd { margin: 2px 0 0; font-size: 12px; color: var(--text-2); line-height: 1.4; }
+.project-settings .ps-table-wrap { overflow-x: auto; max-width: 100%; }
+.project-settings .ps-table-wrap .mini-table { margin-top: 0; }
+.project-settings .members td:first-child { min-width: 180px; }
+.project-settings .ps-pick-list { display: grid; gap: 2px; max-height: 260px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 10px; }
+.project-settings .ps-pick { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; min-width: 0; }
+.project-settings .ps-pick:hover { background: var(--hover); }
+.project-settings .ps-pick:has(input:checked) { background: var(--accent-weak); }
+.project-settings .ps-pick input { accent-color: var(--accent); flex: none; }
+.project-settings .ps-pick-text { display: grid; min-width: 0; flex: 1; }
+.project-settings .ps-pick-text b { font-size: 13px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-settings .ps-pick-text small { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- fluxo de trabalho ---------- */
+.project-settings .col-row { flex-wrap: wrap; }
+.project-settings .col-row input.input { min-width: 120px; }
+.project-settings .ps-col-actions { display: inline-flex; gap: 2px; margin-left: auto; }
+.project-settings .ps-shrink { flex: 0 0 auto !important; min-width: 0 !important; }
+.project-settings .ps-matrix { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.project-settings .ps-matrix th,
+.project-settings .ps-matrix td { padding: 7px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; }
+.project-settings .ps-matrix tr > :first-child { border-left: 1px solid var(--border); }
+.project-settings .ps-matrix thead th { border-top: 1px solid var(--border); font-weight: 550; color: var(--text-2); vertical-align: bottom; min-width: 64px; max-width: 130px; line-height: 1.3; }
+.project-settings .ps-matrix thead tr > :first-child { border-top-left-radius: 9px; }
+.project-settings .ps-matrix thead tr > :last-child { border-top-right-radius: 9px; }
+.project-settings .ps-matrix tbody tr:last-child > :first-child { border-bottom-left-radius: 9px; }
+.project-settings .ps-matrix tbody tr:last-child > :last-child { border-bottom-right-radius: 9px; }
+.project-settings .ps-matrix tbody th { text-align: left; font-weight: 550; white-space: nowrap; }
+.project-settings .ps-matrix tbody th .status-icon { margin-right: 6px; vertical-align: -2px; }
+.project-settings .ps-matrix .ps-corner { font-size: 11px; font-weight: 500; color: var(--text-3); text-align: left; white-space: nowrap; }
+.project-settings .ps-matrix .ps-self { color: var(--text-3); background: var(--panel-2); }
+.project-settings .ps-matrix td:has(input:checked) { background: var(--accent-weak); }
+.project-settings .ps-matrix input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; vertical-align: middle; }
+.project-settings .ps-matrix input:disabled { cursor: default; }
+.project-settings .ps-subform { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* ---------- listas (modelos, labels, campos, links) ---------- */
+.project-settings .ps-list { display: grid; gap: 6px; }
+.project-settings .ps-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); min-width: 0; }
+.project-settings .ps-item-row { align-items: center; flex-wrap: wrap; padding: 8px 10px; }
+.project-settings .ps-item-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.project-settings .ps-item-main p { margin: 0; }
+.project-settings .ps-item-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.project-settings .ps-item-actions { display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+.project-settings .ps-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.project-settings .ps-chips .chip { max-width: 100%; }
+.project-settings .ps-chips .chip b { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.project-settings .ps-chips .status-icon { width: 11px; height: 11px; }
+.project-settings .ps-kicker { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; min-width: 42px; }
+.project-settings .rule-main { display: grid; gap: 5px; }
+
+/* Label: bolinha e fundo na cor escolhida. */
+.project-settings .ps-label {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c) 38%, transparent);
+}
+.project-settings .ps-label .dot { width: 7px; height: 7px; border-radius: 50%; }
+.project-settings .ps-preview { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: var(--panel-2); }
+.project-settings .ps-color-input { width: 30px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); cursor: pointer; }
+.project-settings .ps-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.project-settings .ps-color-input::-webkit-color-swatch { border: 0; border-radius: 5px; }
+
+/* ---------- caixa de entrada ---------- */
+.project-settings .ps-subject { min-width: 160px; overflow-wrap: anywhere; }
+.project-settings .ps-msg-task { color: var(--done); border-color: color-mix(in srgb, var(--done) 35%, transparent); }
+.project-settings .ps-msg-comment { color: var(--series-1); border-color: color-mix(in srgb, var(--series-1) 35%, transparent); }
+.project-settings .ps-msg-error { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 35%, transparent); background: var(--critical-weak); }
+.project-settings .ps-messages .link-btn { font-family: var(--mono); font-size: 12px; }
+.project-settings .mini-table td { vertical-align: top; }
+
+/* ---------- importar e exportar ---------- */
+.project-settings .ps-import-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.project-settings .ps-import { display: grid; gap: 6px; align-content: start; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.project-settings .ps-import b { font-size: 13px; }
+.project-settings .ps-details { margin-top: 12px; }
+.project-settings .ps-details summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); padding: 4px 0; }
+.project-settings .ps-details summary:hover { color: var(--text); }
+.project-settings .ps-details[open] summary { margin-bottom: 8px; }
+.project-settings .ps-details .ps-howto { margin-top: 10px; }
+.project-settings .ps-result { border-color: color-mix(in srgb, var(--done) 40%, var(--border)); }
+.project-settings .ps-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.project-settings .ps-stats > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); }
+.project-settings .ps-stats b { font: 600 18px var(--mono); font-variant-numeric: tabular-nums; }
+.project-settings .ps-stats span { font-size: 12px; color: var(--text-3); }
+.project-settings .ps-errors { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 12px; color: var(--critical); max-height: 220px; overflow-y: auto; overflow-wrap: anywhere; }
+
+/* ---------- links públicos ---------- */
+.project-settings .ps-url { font: 12px var(--mono); color: var(--text); overflow-wrap: anywhere; }
+
+/* ---------- zona de perigo ---------- */
+.project-settings .ps-danger { border-color: color-mix(in srgb, var(--critical) 30%, var(--border)); }
+
+/* ---------- telas estreitas ---------- */
+@media (max-width: 820px) {
+  .project-settings .ps-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  /* A navegação vira uma faixa que rola sozinha, sem rolar a página. */
+  .project-settings .ps-nav { position: static; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .project-settings .ps-nav::-webkit-scrollbar { display: none; }
+  .project-settings .ps-nav-item { flex: none; height: 32px; border: 1px solid var(--border); background: var(--panel); }
+  .project-settings .ps-nav-item.danger { margin-top: 0; }
+  .project-settings .ps-span-2 { grid-column: auto; }
+  .project-settings .ps-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .project-settings .ps-item { flex-wrap: wrap; }
+}

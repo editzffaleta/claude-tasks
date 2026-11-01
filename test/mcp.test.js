@@ -53,10 +53,11 @@ test('initialize e tools/list', async () => {
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   const list = await rpc('tools/list');
   assert.deepEqual(list.result.tools.map((t) => t.name).sort(), [
-    'add_comment', 'add_tasks', 'attach_file', 'complete_tasks', 'delete_tasks', 'get_activity', 'get_attachment',
-    'get_overview', 'get_task', 'list_members', 'list_notifications', 'list_projects', 'list_tasks', 'log_time',
-    'manage_automations', 'manage_columns', 'manage_project', 'manage_settings', 'manage_sprints', 'send_notification',
-    'time_report', 'timer', 'update_task', 'update_tasks',
+    'add_comment', 'add_tasks', 'attach_file', 'complete_tasks', 'delete_tasks', 'export_tasks', 'get_activity',
+    'get_attachment', 'get_overview', 'get_task', 'import_tasks', 'list_members', 'list_notifications', 'list_projects',
+    'list_tasks', 'log_time', 'manage_automations', 'manage_columns', 'manage_comment', 'manage_fields', 'manage_inbox',
+    'manage_labels', 'manage_members', 'manage_project', 'manage_settings', 'manage_sprints', 'manage_workspaces',
+    'search', 'send_notification', 'share_link', 'show_in_dashboard', 'time_report', 'timer', 'update_task', 'update_tasks',
   ]);
   for (const t of list.result.tools) {
     assert.ok(t.title && t.description && t.inputSchema?.type === 'object', `${t.name} completo`);
@@ -275,4 +276,16 @@ test('hook de início de sessão lista as pendências do projeto', async () => {
   assert.match(ctx, /Tarefas abertas de "MeuApp"/);
   assert.match(ctx, /#2 \[em andamento\]/);
   assert.equal(await run(dir), '');
+});
+
+test('add_blocked_by mantém o tipo das dependências existentes', async () => {
+  const r = await call('add_tasks', { project: 'Deps', tasks: [{ title: 'Base' }, { title: 'Paralela' }, { title: 'Final' }] });
+  const [a, b, c] = [...r.text.matchAll(/criada: #(\d+)/g)].map((m) => Number(m[1]));
+  await call('update_task', { id: c, blocked_by: [{ id: a, type: 'start_start' }] });
+  await call('update_task', { id: c, add_blocked_by: [b] });
+  const { Store } = await import('../src/db.js');
+  const s = new Store(join(dir, 't.db'));
+  const deps = Object.fromEntries(s.blockers(c).map((d) => [d.id, d.type]));
+  assert.deepEqual(deps, { [a]: 'start_start', [b]: 'finish_start' });
+  s.db.close();
 });

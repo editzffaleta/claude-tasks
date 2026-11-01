@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run i18n:check
+      - name: Sintaxe do painel
+        run: for f in public/js/*.js public/js/i18n/*.js; do node --check "$f"; done
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t claude-tasks .
+      - name: Sobe o contêiner e confere a API
+        run: |
+          docker run -d --name tarefas -p 4317:4317 claude-tasks
+          for i in $(seq 1 30); do curl -fs http://localhost:4317/api/auth/me && break; sleep 1; done
+          curl -fs http://localhost:4317/api/auth/me | grep -q '"setup":true'
+          curl -fs http://localhost:4317/api/openapi.json | grep -q '"openapi"'
+          docker logs tarefas

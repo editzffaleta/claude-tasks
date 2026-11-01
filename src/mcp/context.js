@@ -1,6 +1,6 @@
 // Estado e formatação compartilhados pelas ferramentas, resources e prompts do MCP.
 import {
-  BOARD_URL, COLUMN_NAME, PRIORITY_LABEL, STATUS_LABEL, Store,
+  BOARD_URL, COLUMN_NAME, DEPENDENCY_LABEL, PRIORITY_LABEL, STATUS_LABEL, Store,
   describeRecurrence, formatDuration, formatTask, today,
 } from '../db.js';
 import { attachEngine } from '../engine.js';
@@ -8,15 +8,44 @@ import { attachEngine } from '../engine.js';
 export const store = new Store();
 attachEngine(store);
 
+// Autor das mudanças (o chat do painel com outro provedor troca para "ia" durante a execução).
 export const CLAUDE = { author: 'claude' };
+
+// Pessoa conversando no chat do painel (provedores de API rodam as ferramentas aqui dentro).
+let currentUser = null;
+export const setCurrentUser = (user) => { currentUser = user; };
 
 // Quem está usando o Claude: CLAUDE_TASKS_USER (e-mail ou nome) ou, se o quadro tem
 // uma única conta, essa conta. Usado para "minhas tarefas", timers e notificações.
 export function me() {
+  if (currentUser) return currentUser;
   const ref = process.env.CLAUDE_TASKS_USER;
   if (ref) return store.findUser(ref);
   const users = store.listUsers();
   return users.length === 1 ? users[0] : null;
+}
+
+// Permissões só valem no chat do painel (usuário definido ou CLAUDE_TASKS_ENFORCE=1).
+// Nas suas sessões locais do Claude o MCP tem acesso total, como o próprio arquivo do banco.
+export const actingUser = () => currentUser || (process.env.CLAUDE_TASKS_ENFORCE ? me() : null);
+export const visible = () => store.visibleProjectIds(actingUser());
+
+export function guardProject(project, level = 'read') {
+  const user = actingUser();
+  if (user && project) store.assertCan(user, project, level);
+}
+
+export function guardTask(ref, level = 'read') {
+  const id = store.resolveTaskRef(ref);
+  const t = store.task(id);
+  if (!t) throw new Error(`Tarefa #${id} não encontrada`);
+  guardProject(t.project_id, level);
+  return t;
+}
+
+export function guardAdmin() {
+  const user = actingUser();
+  if (user && user.role !== 'admin') throw new Error('Só administradores podem fazer isso');
 }
 
 // Tempo registrado pelo Claude conta para a pessoa que está usando ele.
@@ -25,15 +54,20 @@ export const timeActor = () => ({ author: 'claude', user_id: me()?.id ?? null })
 export const boardLink = (project) => (project ? `${BOARD_URL}/?project=${project.id}` : BOARD_URL);
 export const taskLink = (id) => `${BOARD_URL}/?task=${id}`;
 
-export function projectFrom(args, { create = true } = {}) {
-  if (args.project_path || args.project) return store.resolveProject({ project_path: args.project_path, project: args.project, create });
-  return null;
+export function projectFrom(args, { create = true, level = 'read' } = {}) {
+  if (!args.project_path && !args.project) return null;
+  const user = actingUser();
+  if (user && create && user.role === 'viewer') create = false;
+  const p = store.resolveProject({ project_path: args.project_path, project: args.project, create });
+  if (p) guardProject(p, level);
+  return p;
 }
 
 // Sem projeto informado, usa o diretório em que a sessão do Claude está.
-export function requireProject(args, { create = true } = {}) {
-  const p = projectFrom(args, { create }) || store.resolveProject({ project_path: process.cwd(), create });
-  if (!p) throw new Error('Projeto não encontrado no quadro');
+export function requireProject(args, { create = true, level = 'edit' } = {}) {
+  const p = projectFrom(args, { create, level }) || (actingUser() ? null : store.resolveProject({ project_path: process.cwd(), create }));
+  if (!p) throw new Error('Informe o projeto (project ou project_path)');
+  guardProject(p, level);
   return p;
 }
 
@@ -54,6 +88,7 @@ export function userIds(refs) {
 export function taskJson(t) {
   return {
     id: t.id,
+    ref: t.ref,
     title: t.title,
     project: t.project_name,
     project_id: t.project_id,
@@ -66,12 +101,17 @@ export function taskJson(t) {
     due_date: t.due_date,
     overdue: t.overdue,
     estimate_minutes: t.estimate_minutes,
+    remaining_minutes: t.remaining_minutes,
     spent_minutes: t.spent_minutes,
+    story_points: t.story_points,
     sprint: t.sprint_name,
     parent_id: t.parent_id,
     subtasks: t.subtask_count ? { done: t.subtask_done, total: t.subtask_count } : null,
     open_blockers: t.open_blockers,
     assignees: t.assignee_ids.map((id) => store.user(id)?.name).filter(Boolean),
+    watchers: t.watcher_ids.map((id) => store.user(id)?.name).filter(Boolean),
+    reporter: t.reporter_id ? store.user(t.reporter_id)?.name ?? null : null,
+    fields: Object.fromEntries(store.customFields(t.project_id).filter((f) => t.field_values?.[f.id] != null).map((f) => [f.name, t.field_values[f.id]])),
     recurrence: t.recurrence,
     archived: !!t.archived_at,
     source: t.source,
@@ -93,23 +133,37 @@ export function describeTask(t) {
   if (t.estimate_minutes || t.spent_minutes) {
     facts.push(`tempo ${formatDuration(t.spent_minutes)} de ${t.estimate_minutes ? formatDuration(t.estimate_minutes) : 'sem estimativa'}${t.timer_running ? ' (timer rodando)' : ''}`);
   }
+  if (t.remaining_minutes != null) facts.push(`restante ${formatDuration(t.remaining_minutes)}`);
+  if (t.story_points != null) facts.push(`${t.story_points} story points`);
   if (t.recurrence) facts.push(`repete ${describeRecurrence(t.recurrence)}`);
   if (t.sprint_name) facts.push(`sprint ${t.sprint_name}`);
   const people = store.assigneesOf(t.id).map((u) => u.name);
   if (people.length) facts.push(`responsáveis: ${people.join(', ')}`);
+  if (t.reporter_id) facts.push(`relator: ${store.user(t.reporter_id)?.name}`);
+  const watchers = (t.watchers || store.watchersOf(t.id)).map((u) => u.name);
+  if (watchers.length) facts.push(`observadores: ${watchers.join(', ')}`);
   if (facts.length) lines.push(facts.join(' · '));
+  const fields = (t.fields || store.fieldsWithValues(t)).filter((f) => f.value != null);
+  if (fields.length) {
+    lines.push(`Campos: ${fields.map((f) => `${f.name} = ${f.type === 'user' ? store.user(f.value)?.name : Array.isArray(f.value) ? f.value.join(', ') : f.value}`).join(' · ')}`);
+  }
+  if (t.allowed_columns) {
+    const names = t.allowed_columns.slice(1).map((id) => store.column(id)?.name).filter(Boolean);
+    lines.push(`Pode ir para: ${names.join(', ') || 'nenhuma coluna (transições restritas)'}`);
+  }
   lines.push(`Criada: ${t.created_at} por ${t.source} · Atualizada: ${t.updated_at} · ${taskLink(t.id)}`, '', t.description || '(sem descrição)');
   if (t.parent_id) lines.push('', `Subtarefa de #${t.parent_id} ${t.parent_title}`);
   if (t.subtasks?.length) lines.push('', 'Subtarefas:', ...t.subtasks.map((s) => `- ${formatTask(s)}`));
-  if (t.blockers?.length) lines.push('', 'Bloqueada por:', ...t.blockers.map((b) => `- #${b.id} [${STATUS_LABEL[b.status]}] ${b.title}`));
-  if (t.blocking?.length) lines.push('', 'Bloqueia:', ...t.blocking.map((b) => `- #${b.id} [${STATUS_LABEL[b.status]}] ${b.title}`));
+  const dep = (b) => `- #${b.id} [${STATUS_LABEL[b.status]}] ${b.title}${b.type && b.type !== 'finish_start' ? ` (${DEPENDENCY_LABEL[b.type]})` : ''}`;
+  if (t.blockers?.length) lines.push('', 'Bloqueada por:', ...t.blockers.map(dep));
+  if (t.blocking?.length) lines.push('', 'Bloqueia:', ...t.blocking.map(dep));
   if (t.attachments?.length) {
     lines.push('', 'Anexos (leia com get_attachment):', ...t.attachments.map((a) => `- id ${a.id}: ${a.name} (${a.mime}, ${Math.ceil(a.size / 1024)} KB)`));
   }
   if (t.time_entries?.length) {
     lines.push('', 'Tempo registrado:', ...t.time_entries.slice(0, 10).map((e) => `- ${e.started_at.slice(0, 10)} ${e.user_name || e.author}: ${e.ended_at ? formatDuration(e.minutes) : 'rodando'}${e.note ? ` — ${e.note}` : ''}`));
   }
-  const notes = (t.notes || []).map((n) => `- ${n.created_at.slice(0, 16).replace('T', ' ')} ${n.author === 'claude' ? 'Claude' : n.user_name || n.author}${n.kind === 'event' ? ' ·' : ':'} ${n.body}`);
+  const notes = (t.notes || []).map((n) => `${n.parent_id ? '  ↳ ' : '- '}${n.created_at.slice(0, 16).replace('T', ' ')} ${n.author === 'claude' ? 'Claude' : n.user_name || n.author}${n.kind === 'note' ? ` [comentário ${n.id}${n.edited_at ? ', editado' : ''}]` : ''}${n.kind === 'event' ? ' ·' : ':'} ${n.body}`);
   if (notes.length) lines.push('', 'Histórico:', ...notes);
   return lines.join('\n');
 }
@@ -118,7 +172,7 @@ export function describeTask(t) {
 export function projectBoard(project) {
   const cols = store.columns(project.id);
   const tasks = store.listTasks({ project_id: project.id, status: 'open', limit: 1000 });
-  const sprints = store.sprints(project.id).filter((s) => s.status !== 'completed');
+  const sprints = store.sprints(project.id).filter((s) => s.status === 'active' || s.status === 'planning');
   const lines = [`# ${project.name}`, project.path ? `Pasta: ${project.path}` : 'Sem pasta vinculada', boardLink(project)];
   if (project.description) lines.push('', project.description);
   for (const s of sprints) {
@@ -135,7 +189,7 @@ export function projectBoard(project) {
 }
 
 export function overviewText(project) {
-  const s = store.stats({ project_id: project?.id });
+  const s = store.stats({ project_id: project?.id, project_ids: project ? undefined : visible() });
   const t = s.totals;
   const lines = [
     project ? `# Visão geral · ${project.name}` : '# Visão geral de todos os projetos',
@@ -148,14 +202,14 @@ export function overviewText(project) {
     lines.push('', '## Por projeto', ...s.byProject.sort((a, b) => b.open - a.open)
       .map((p) => `- ${p.name}: ${p.open} abertas${p.doing ? `, ${p.doing} em andamento` : ''}${p.blocked ? `, ${p.blocked} bloqueadas` : ''}${p.overdue ? `, ${p.overdue} ATRASADAS` : ''}`));
   }
-  lines.push('', '## Por prioridade (abertas)', ['urgent', 'high', 'medium', 'low'].map((k) => `${PRIORITY_LABEL[k]}: ${s.byPriority[k]}`).join(' · '));
+  lines.push('', '## Por prioridade (abertas)', ['urgent', 'high', 'medium', 'low', 'lowest'].map((k) => `${PRIORITY_LABEL[k]}: ${s.byPriority[k]}`).join(' · '));
   if (s.sprint) lines.push('', `## Sprint ativa: ${s.sprint.name} — ${s.sprint.done}/${s.sprint.total} concluídas${s.sprint.end_date ? `, termina ${s.sprint.end_date}` : ''}`);
-  const overdue = store.listTasks({ project_id: project?.id, due: 'overdue', limit: 15 });
+  const overdue = store.listTasks({ project_id: project?.id, project_ids: project ? undefined : visible(), due: 'overdue', limit: 15 });
   if (overdue.length) lines.push('', '## Atrasadas', ...overdue.map((x) => `- ${formatTask(x, { withProject: !project })}`));
   if (s.upcoming.length) lines.push('', '## Próximos prazos', ...s.upcoming.map((x) => `- ${formatTask(x, { withProject: !project })}`));
-  const doing = store.listTasks({ project_id: project?.id, status: 'doing', limit: 15 });
+  const doing = store.listTasks({ project_id: project?.id, project_ids: project ? undefined : visible(), status: 'doing', limit: 15 });
   if (doing.length) lines.push('', '## Em andamento', ...doing.map((x) => `- ${formatTask(x, { withProject: !project })}`));
-  const blocked = store.listTasks({ project_id: project?.id, status: 'blocked', limit: 15 });
+  const blocked = store.listTasks({ project_id: project?.id, project_ids: project ? undefined : visible(), status: 'blocked', limit: 15 });
   if (blocked.length) lines.push('', '## Bloqueadas', ...blocked.map((x) => `- ${formatTask(x, { withProject: !project })}`));
   return lines.join('\n');
 }

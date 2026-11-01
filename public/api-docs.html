@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API do quadro de tarefas</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d97757'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='white' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f5;
+      --panel: #ffffff;
+      --panel-2: #f1f1ee;
+      --border: #e3e3df;
+      --border-strong: #cfcfca;
+      --text: #1c1c1a;
+      --text-2: #55554f;
+      --text-3: #6b6b65;
+      --accent: #b4532f;
+      --focus: #2f6fd0;
+      --code-bg: #f1f1ee;
+      --get-bg: #e4eefb; --get: #0b4f9c;
+      --post-bg: #e2f3e8; --post: #136237;
+      --patch-bg: #fbefd6; --patch: #774600;
+      --delete-bg: #fbe4e4; --delete: #a01c1c;
+      --ok: #136237;
+      --err: #a01c1c;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --top-h: 57px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #0f0f11;
+        --panel: #17171a;
+        --panel-2: #1e1e22;
+        --border: #2a2a2f;
+        --border-strong: #3a3a41;
+        --text: #ececee;
+        --text-2: #b0b0b7;
+        --text-3: #8e8e96;
+        --accent: #e88a66;
+        --focus: #7aa7ff;
+        --code-bg: #232328;
+        --get-bg: rgba(84, 150, 240, 0.16); --get: #9cc4f7;
+        --post-bg: rgba(70, 190, 120, 0.15); --post: #86d9a8;
+        --patch-bg: rgba(230, 170, 50, 0.15); --patch: #f0c46c;
+        --delete-bg: rgba(240, 100, 100, 0.15); --delete: #f5a3a3;
+        --ok: #86d9a8;
+        --err: #f5a3a3;
+        --shadow: none;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: calc(var(--top-h) + 12px); }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.55 var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    code, kbd, pre { font-family: var(--mono); font-size: 0.92em; }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+    [hidden] { display: none !important; }
+
+    /* ---- topo ---- */
+    .top {
+      position: sticky; top: 0; z-index: 30;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 10px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; font-weight: 650; font-size: 15px; }
+    .brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand svg { flex: none; }
+    .ver { color: var(--text-3); font-size: 12px; font-family: var(--mono); white-space: nowrap; }
+    .search {
+      flex: 1 1 260px; max-width: 460px; margin-left: auto;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 10px; height: 36px;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text-3);
+    }
+    .search:focus-within { border-color: var(--focus); }
+    .search input {
+      flex: 1; min-width: 0; height: 100%;
+      border: 0; outline: 0; background: transparent; color: var(--text); font: inherit;
+    }
+    .search kbd { font-size: 11px; padding: 1px 6px; border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-3); }
+    .links { display: flex; gap: 14px; font-size: 13px; }
+    .links a { color: var(--text-2); text-decoration: none; }
+    .links a:hover { color: var(--text); text-decoration: underline; }
+    .menu {
+      display: none; flex: none;
+      width: 36px; height: 36px; padding: 0;
+      align-items: center; justify-content: center;
+      background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+    }
+
+    /* ---- estrutura ---- */
+    .layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); }
+    .nav {
+      position: sticky; top: var(--top-h);
+      height: calc(100vh - var(--top-h));
+      overflow-y: auto; overscroll-behavior: contain;
+      padding: 16px 10px 40px;
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .nav a { display: flex; align-items: center; gap: 8px; text-decoration: none; border-radius: 6px; }
+    .nav-intro { padding: 6px 8px; font-weight: 600; }
+    .nav-group { margin-top: 10px; }
+    .nav-tag { padding: 5px 8px; font-weight: 600; font-size: 13px; color: var(--text); }
+    .nav-tag .count { margin-left: auto; color: var(--text-3); font-weight: 500; font-size: 12px; }
+    .nav ul { list-style: none; margin: 0; padding: 0; }
+    .nav li a { padding: 4px 8px; color: var(--text-2); font-size: 13px; }
+    .nav a:hover, .nav a.active { background: var(--panel-2); color: var(--text); }
+    .nav-sum { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .backdrop { display: none; }
+
+    main { min-width: 0; padding: 28px 36px 80px; max-width: 1000px; }
+    .status { color: var(--text-2); }
+    .status.error { color: var(--err); }
+    .intro h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.01em; }
+    .intro .sub { color: var(--text-3); margin: 0 0 18px; }
+    .md p { margin: 0 0 10px; }
+    .md ul { margin: 0 0 10px; padding-left: 20px; }
+    .md li { margin: 2px 0; }
+    .intro .md { color: var(--text-2); max-width: 760px; }
+    .intro .md strong { color: var(--text); }
+    .counter { color: var(--text-3); font-size: 13px; margin: 18px 0 0; }
+    .empty { padding: 30px 0; color: var(--text-2); }
+
+    .tag-section { margin-top: 40px; }
+    .tag-section > h2 { margin: 0 0 4px; font-size: 20px; }
+    .tag-section > .tag-desc { margin: 0 0 16px; color: var(--text-2); }
+
+    /* ---- operação ---- */
+    .op {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 16px 18px;
+      margin: 0 0 14px;
+    }
+    .op:target { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+    .op-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .path { font-family: var(--mono); font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; text-decoration: none; }
+    .path:hover { text-decoration: underline; }
+    .path .p { color: var(--accent); }
+    .auth {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--text-2); white-space: nowrap;
+    }
+    .auth.pub { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .op h3 { margin: 10px 0 2px; font-size: 16px; font-weight: 600; }
+    .op .desc { color: var(--text-2); margin-top: 4px; }
+    .perm { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; font-size: 13px; color: var(--text-2); }
+    .perm svg { flex: none; margin-top: 3px; color: var(--text-3); }
+    .block { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+    .block h4 {
+      margin: 0 0 8px; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); font-weight: 650;
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    .opt { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-3); border: 1px solid var(--border-strong); border-radius: 999px; padding: 0 7px; }
+
+    .m {
+      flex: none; display: inline-block; min-width: 54px; text-align: center;
+      font: 700 11px/1 var(--mono); letter-spacing: 0.03em;
+      padding: 5px 6px; border-radius: 5px;
+    }
+    .nav .m { min-width: 46px; font-size: 10px; padding: 3px 4px; }
+    .m-get { background: var(--get-bg); color: var(--get); }
+    .m-post { background: var(--post-bg); color: var(--post); }
+    .m-patch, .m-put { background: var(--patch-bg); color: var(--patch); }
+    .m-delete { background: var(--delete-bg); color: var(--delete); }
+
+    /* ---- parâmetros ---- */
+    .params { display: grid; gap: 10px; }
+    .param { display: grid; grid-template-columns: minmax(130px, 210px) minmax(0, 1fr); gap: 4px 14px; }
+    .p-name { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+    .p-name code { font-weight: 600; background: none; padding: 0; }
+    .p-info { min-width: 0; color: var(--text-2); }
+    .p-in { color: var(--text-3); font-size: 12.5px; }
+    .p-desc { color: var(--text-2); }
+    .req { font-size: 11.5px; color: var(--accent); font-weight: 600; }
+    .t { color: var(--text-2); font-size: 12.5px; }
+    .enum { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12.5px; color: var(--text-3); }
+    .enum code { font-size: 12px; }
+    .muted { color: var(--text-3); font-size: 13px; margin: 4px 0; }
+    .types { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+    .types code { font-size: 12px; color: var(--text-2); }
+    .tline { color: var(--text-2); font-size: 13px; margin: 2px 0 6px; }
+
+    /* ---- campos de schema ---- */
+    .fields { list-style: none; margin: 4px 0 0; padding: 0; }
+    .fields .fields { margin: 6px 0 2px 2px; padding-left: 12px; border-left: 1px solid var(--border); }
+    .fields > li { padding: 6px 0; border-top: 1px dashed var(--border); }
+    .fields > li:first-child { border-top: 0; }
+    .f-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .f-name { font-weight: 600; background: none; padding: 0; }
+    .f-desc { color: var(--text-2); font-size: 13px; margin-top: 1px; }
+    .f-meta { color: var(--text-3); font-size: 12.5px; }
+    details.sub { margin-top: 4px; }
+    details.sub > summary {
+      cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;
+      color: var(--text-2); font-size: 13px; padding: 2px 0; user-select: none;
+    }
+    details.sub > summary::-webkit-details-marker { display: none; }
+    details.sub > summary::before {
+      content: ""; width: 0; height: 0; border: 4px solid transparent; border-left: 6px solid var(--text-3); border-right: 0;
+      transition: transform 0.12s;
+    }
+    details.sub[open] > summary::before { transform: rotate(90deg); }
+    details.sub > summary:hover { color: var(--text); }
+    details.sub > .sub-body { padding-left: 12px; border-left: 1px solid var(--border); margin: 4px 0 2px 2px; }
+    .variants { margin-top: 4px; }
+    .variant { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+    .variant .fields > li { border-top-color: var(--border-strong); }
+    .v-title { font-size: 13px; color: var(--text-2); }
+
+    /* ---- respostas ---- */
+    .resps { display: grid; gap: 8px; }
+    .resp { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; align-items: start; }
+    .code {
+      font: 700 12px/1 var(--mono); padding: 4px 0; border-radius: 5px; text-align: center;
+      background: var(--panel-2); color: var(--text-2);
+    }
+    .code.c2 { background: var(--post-bg); color: var(--post); }
+    .code.c4, .code.c5 { background: var(--delete-bg); color: var(--delete); }
+    .resp-desc { color: var(--text-2); }
+    pre.ex {
+      margin: 6px 0 0; padding: 10px 12px; border-radius: 8px;
+      background: var(--code-bg); color: var(--text-2);
+      white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px;
+    }
+
+    /* ---- celular e tablet ---- */
+    @media (max-width: 860px) {
+      .menu { display: inline-flex; }
+      .layout { grid-template-columns: minmax(0, 1fr); }
+      .nav {
+        position: fixed; z-index: 25; left: 0; top: var(--top-h); bottom: 0;
+        width: min(320px, 86vw); height: auto;
+        transform: translateX(-102%); transition: transform 0.18s ease;
+        background: var(--panel); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+      }
+      body.nav-open .nav { transform: none; }
+      body.nav-open .backdrop { display: block; position: fixed; inset: var(--top-h) 0 0 0; z-index: 20; background: rgba(0, 0, 0, 0.35); }
+      .brand { flex: 1 1 0; }
+      .search { order: 3; flex-basis: 100%; max-width: none; margin-left: 0; }
+      .search kbd { display: none; }
+      .links { flex: none; }
+      main { padding: 20px 16px 60px; }
+      .intro h1 { font-size: 22px; }
+    }
+    @media (max-width: 560px) {
+      .op { padding: 14px; }
+      .auth { margin-left: 0; }
+      .param { grid-template-columns: minmax(0, 1fr); }
+      .ver { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .nav, details.sub > summary::before { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top" id="top">
+    <button class="menu" id="menu" type="button" aria-controls="nav" aria-expanded="false" aria-label="Mostrar índice">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <a class="brand" href="#intro">
+      <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#d97757"/><path d="M9 16.5l4.5 4.5L23 11.5" stroke="#fff" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>API do quadro de tarefas</span>
+    </a>
+    <span class="ver" id="ver"></span>
+    <label class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Buscar operação, caminho ou método" autocomplete="off" spellcheck="false" aria-label="Buscar operações">
+      <kbd>/</kbd>
+    </label>
+    <nav class="links" aria-label="Links">
+      <a href="/api/openapi.json">JSON</a>
+      <a href="/">Quadro</a>
+    </nav>
+  </header>
+  <div class="layout">
+    <aside class="nav" id="nav" aria-label="Índice"></aside>
+    <div class="backdrop" id="backdrop"></div>
+    <main id="main"><p class="status">Carregando a documentação…</p></main>
+  </div>
+
+  <script>
+    // Visualizador do documento OpenAPI servido em /api/openapi.json (sem dependências).
+    (() => {
+      const $ = (sel) => document.querySelector(sel);
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      const slug = (s) => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
+      const IN = { path: 'caminho', query: 'query', header: 'cabeçalho', cookie: 'cookie' };
+      const LOCK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+      const OPEN = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>';
+      const SHIELD = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></svg>';
+
+      let spec;
+      const lazy = new Map();
+      let lazyId = 0;
+
+      // ---- texto: markdown mínimo (parágrafos, listas, **negrito** e `código`) ----
+      const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      function md(text) {
+        return String(text || '').split(/\n{2,}/).map((block) => {
+          const lines = block.split('\n');
+          const first = lines.findIndex((l) => /^\s*- /.test(l));
+          if (first === -1) return `<p>${inline(lines.join(' '))}</p>`;
+          const head = first ? `<p>${inline(lines.slice(0, first).join(' '))}</p>` : '';
+          return `${head}<ul>${lines.slice(first).map((l) => `<li>${inline(l.replace(/^\s*- /, ''))}</li>`).join('')}</ul>`;
+        }).join('');
+      }
+
+      // ---- schemas ----
+      const refName = (r) => decodeURIComponent(String(r).split('/').pop());
+      function resolve(s) {
+        for (let i = 0; s && s.$ref && i < 20; i++) s = spec.components?.schemas?.[refName(s.$ref)];
+        return s || {};
+      }
+      const isNull = (s) => s && s.type === 'null';
+      // Separa o "ou null" do resto do schema.
+      function stripNull(s) {
+        if (!s) return [{}, false];
+        const list = s.oneOf || s.anyOf;
+        if (list && list.some(isNull)) {
+          const rest = list.filter((x) => !isNull(x));
+          const base = rest.length === 1 ? { ...rest[0] } : { ...s, oneOf: rest, anyOf: undefined };
+          if (s.description && !base.description) base.description = s.description;
+          return [base, true];
+        }
+        if (Array.isArray(s.type) && s.type.includes('null')) {
+          const t = s.type.filter((x) => x !== 'null');
+          return [{ ...s, type: t.length === 1 ? t[0] : t, enum: s.enum && s.enum.filter((v) => v !== null) }, true];
+        }
+        return [s, false];
+      }
+      function flatten(s, guard = 0) {
+        const out = { properties: {}, required: new Set(), additional: undefined };
+        if (!s || guard > 12) return out;
+        if (s.$ref) return flatten(resolve(s), guard + 1);
+        for (const part of s.allOf || []) {
+          const f = flatten(part, guard + 1);
+          Object.assign(out.properties, f.properties);
+          f.required.forEach((r) => out.required.add(r));
+          if (f.additional !== undefined) out.additional = f.additional;
+        }
+        Object.assign(out.properties, s.properties || {});
+        (s.required || []).forEach((r) => out.required.add(r));
+        if (s.additionalProperties !== undefined) out.additional = s.additionalProperties;
+        return out;
+      }
+      const types = (s) => [].concat(s.type || []);
+      function complex(s0, guard = 0) {
+        const [s] = stripNull(s0);
+        if (guard > 6) return false;
+        if (s.$ref) return complex(resolve(s), guard + 1);
+        if (s.allOf) return true;
+        if (s.oneOf || s.anyOf) return (s.oneOf || s.anyOf).some((v) => complex(v, guard + 1));
+        if (types(s).includes('array') && s.items) return complex(s.items, guard + 1);
+        if (s.properties && Object.keys(s.properties).length) return true;
+        return !!(s.additionalProperties && typeof s.additionalProperties === 'object' && complex(s.additionalProperties, guard + 1));
+      }
+      function typeLabel(s0) {
+        const [s, nullable] = stripNull(s0);
+        let t;
+        if (s.$ref) t = refName(s.$ref);
+        else if (s.const !== undefined) t = JSON.stringify(s.const);
+        else if (s.oneOf || s.anyOf) t = (s.oneOf || s.anyOf).map(typeLabel).join(' | ');
+        else if (s.allOf) t = s.allOf.map((x) => (x.$ref ? refName(x.$ref) : 'object')).join(' + ');
+        else {
+          const list = types(s);
+          if (!list.length) list.push(s.properties ? 'object' : s.items ? 'array' : 'qualquer');
+          t = list.map((x) => {
+            if (x === 'array') {
+              const inner = s.items ? typeLabel(s.items) : 'qualquer';
+              return /[|+ ]/.test(inner) ? `(${inner})[]` : `${inner}[]`;
+            }
+            if (x === 'string' && s.format) return s.format;
+            if (x === 'object' && !s.properties && s.additionalProperties && typeof s.additionalProperties === 'object') {
+              return `{ chave: ${typeLabel(s.additionalProperties)} }`;
+            }
+            return x;
+          }).join(' | ');
+        }
+        return nullable ? `${t} | null` : t;
+      }
+      function constraints(s) {
+        const out = [];
+        if (s.default !== undefined) out.push(`padrão <code>${esc(JSON.stringify(s.default))}</code>`);
+        if (s.minimum !== undefined && s.maximum !== undefined) out.push(`de ${s.minimum} a ${s.maximum}`);
+        else if (s.minimum !== undefined) out.push(`mínimo ${s.minimum}`);
+        else if (s.maximum !== undefined) out.push(`máximo ${s.maximum}`);
+        if (s.minLength) out.push(`mínimo ${s.minLength} caracteres`);
+        if (s.maxLength) out.push(`até ${s.maxLength} caracteres`);
+        if (s.pattern) out.push(`formato <code>${esc(s.pattern)}</code>`);
+        return out.length ? `<span class="f-meta">${out.join(' · ')}</span>` : '';
+      }
+      function enumList(s) {
+        const [base] = stripNull(s);
+        const items = base.items ? stripNull(base.items)[0] : null;
+        const values = base.enum || items?.enum;
+        if (!values?.length) return '';
+        return `<div class="enum">Valores: ${values.filter((v) => v !== null).map((v) => `<code>${esc(v)}</code>`).join('')}</div>`;
+      }
+      function lazyBlock(schema, seen, label) {
+        const id = ++lazyId;
+        lazy.set(String(id), [schema, seen]);
+        return `<details class="sub" data-lazy="${id}"><summary>${label}</summary><div class="sub-body"></div></details>`;
+      }
+      // Corpo de um schema: lista de campos, formatos alternativos ou itens da lista.
+      function renderSchema(s0, seen = []) {
+        const [s] = stripNull(s0);
+        if (s.$ref) {
+          const name = refName(s.$ref);
+          if (seen.includes(name)) return `<p class="muted">${esc(name)} (repete a estrutura acima)</p>`;
+          return renderSchema(resolve(s), [...seen, name]);
+        }
+        if (s.oneOf || s.anyOf) return variants(s.oneOf || s.anyOf, seen);
+        if (types(s).includes('array') && s.items && !s.properties) {
+          return complex(s.items) ? `<p class="muted">Cada item:</p>${renderSchema(s.items, seen)}` : '';
+        }
+        return fieldList(s, seen);
+      }
+      function variants(list, seen) {
+        const items = list.map((v) => {
+          const [vv] = stripNull(v);
+          const target = resolve(vv);
+          const title = vv.title || target.title || (vv.$ref ? refName(vv.$ref) : typeLabel(vv));
+          const desc = vv.description || target.description;
+          return `<div class="variant"><div class="v-title"><code>${esc(title)}</code>${desc ? ` ${inline(desc)}` : ''}</div>${complex(vv) ? renderSchema(vv, seen) : enumList(vv)}</div>`;
+        });
+        return `<div class="variants"><p class="muted">Um destes formatos:</p>${items.join('')}</div>`;
+      }
+      function fieldList(s, seen) {
+        const f = flatten(s);
+        const names = Object.keys(f.properties);
+        if (!names.length) {
+          if (f.additional && typeof f.additional === 'object') {
+            return `<p class="muted">Para cada chave, um ${esc(typeLabel(f.additional))}:</p>${renderSchema(f.additional, seen)}`;
+          }
+          return '<p class="muted">Objeto livre.</p>';
+        }
+        return `<ul class="fields">${names.map((n) => field(n, f.properties[n], f.required.has(n), seen)).join('')}</ul>`;
+      }
+      function field(name, prop, required, seen) {
+        const [p] = stripNull(prop);
+        const desc = prop.description || p.description || '';
+        let nested = '';
+        if (complex(p)) {
+          const isRef = p.$ref || (types(p).includes('array') && p.items && stripNull(p.items)[0].$ref);
+          const many = p.oneOf || p.anyOf || (p.items && (p.items.oneOf || p.items.anyOf));
+          if (isRef || many || p.allOf) nested = lazyBlock(p, seen, many ? 'Ver formatos' : `Ver campos de <code>${esc(typeLabel(p).replace(/ \| null$/, ''))}</code>`);
+          else nested = renderSchema(p, seen);
+        }
+        return `<li><div class="f-line"><code class="f-name">${esc(name)}</code><code class="t">${esc(typeLabel(prop))}</code>${required ? '<span class="req">obrigatório</span>' : ''}${constraints(p)}</div>`
+          + `${desc ? `<div class="f-desc">${inline(desc)}</div>` : ''}${enumList(prop)}${nested}</li>`;
+      }
+      // Bloco de schema com o tipo em destaque; expandido (corpo) ou recolhido (respostas).
+      function schemaBlock(schema, open) {
+        const label = typeLabel(schema);
+        const top = resolve(stripNull(schema)[0]);
+        const desc = schema.description || top.description;
+        const head = `<div class="tline">Tipo <code>${esc(label)}</code>${desc ? ` — ${inline(desc)}` : ''}</div>`;
+        if (!complex(schema)) return head + enumList(schema);
+        const many = top.oneOf || top.anyOf;
+        return open ? head + renderSchema(schema, []) : head + lazyBlock(schema, [], many ? 'Ver formatos' : 'Ver campos');
+      }
+
+      // ---- operação ----
+      function pathHtml(path) {
+        return esc(path).replace(/\{(\w+)\}/g, '<span class="p">{$1}</span>');
+      }
+      function paramsBlock(params) {
+        if (!params?.length) return '';
+        const rows = params.map((p0) => {
+          const p = p0.$ref ? spec.components.parameters?.[refName(p0.$ref)] || {} : p0;
+          return `<div class="param"><div class="p-name"><code>${esc(p.name)}</code>${p.required ? '<span class="req">obrigatório</span>' : ''}</div>`
+            + `<div class="p-info"><span class="p-in">${IN[p.in] || esc(p.in)}</span> · <code class="t">${esc(typeLabel(p.schema || {}))}</code> ${constraints(p.schema || {})}`
+            + `${p.description ? `<div class="p-desc">${inline(p.description)}</div>` : ''}${enumList(p.schema || {})}</div></div>`;
+        });
+        return `<section class="block"><h4>Parâmetros</h4><div class="params">${rows.join('')}</div></section>`;
+      }
+      function bodyBlock(rb) {
+        if (!rb) return '';
+        const media = Object.entries(rb.content || {});
+        const [, first] = media[0] || [];
+        const schema = first?.schema || {};
+        const binary = schema.format === 'binary';
+        return `<section class="block"><h4>Corpo da requisição ${rb.required ? '' : '<span class="opt">opcional</span>'}</h4>`
+          + `<div class="types">${media.map(([t]) => `<code>${esc(t)}</code>`).join('')}</div>`
+          + `${rb.description ? `<p class="desc">${inline(rb.description)}</p>` : ''}`
+          + `${binary ? '<p class="muted">Corpo binário: o próprio arquivo.</p>' : schemaBlock(schema, true)}</section>`;
+      }
+      function responsesBlock(responses) {
+        const rows = Object.entries(responses || {}).map(([code, r0]) => {
+          const r = r0.$ref ? spec.components.responses?.[refName(r0.$ref)] || {} : r0;
+          const media = Object.entries(r.content || {});
+          const ok = code.startsWith('2');
+          let extra = '';
+          if (ok && media.length) {
+            const [, m] = media[0];
+            extra += `<div class="types">${media.map(([t]) => `<code>${esc(t)}</code>`).join('')}</div>`;
+            if (m.schema && m.schema.format !== 'binary') extra += schemaBlock(m.schema, false);
+            if (m.example) extra += `<pre class="ex">${esc(m.example)}</pre>`;
+          } else if (media.length) {
+            extra += `<div class="tline">Corpo <code>{ "error": string }</code></div>`;
+          }
+          for (const [name, h] of Object.entries(r.headers || {})) {
+            extra += `<div class="tline">Cabeçalho <code>${esc(name)}</code>${h.description ? ` — ${inline(h.description)}` : ''}</div>`;
+          }
+          return `<div class="resp"><span class="code c${esc(code[0])}">${esc(code)}</span><div><div class="resp-desc">${inline(r.description || '')}</div>${extra}</div></div>`;
+        });
+        return `<section class="block"><h4>Respostas</h4><div class="resps">${rows.join('')}</div></section>`;
+      }
+      function operationHtml(o) {
+        const { op } = o;
+        const pub = Array.isArray(op.security) && op.security.length === 0;
+        return `<article class="op" id="${esc(o.id)}">`
+          + `<div class="op-head"><span class="m m-${o.method}">${o.method.toUpperCase()}</span>`
+          + `<a class="path" href="#${esc(o.id)}">${pathHtml(o.path)}</a>`
+          + `<span class="auth ${pub ? 'pub' : ''}">${pub ? `${OPEN} Público` : `${LOCK} Requer login`}</span></div>`
+          + `<h3>${esc(op.summary || '')}</h3>`
+          + `${op.description ? `<div class="desc md">${md(op.description)}</div>` : ''}`
+          + `${op['x-permission'] ? `<div class="perm">${SHIELD}<span>Permissão: ${inline(op['x-permission'])}</span></div>` : ''}`
+          + paramsBlock(op.parameters) + bodyBlock(op.requestBody) + responsesBlock(op.responses)
+          + '</article>';
+      }
+
+      // ---- página ----
+      function render() {
+        const ops = [];
+        for (const [path, item] of Object.entries(spec.paths || {})) {
+          for (const method of METHODS) {
+            const op = item[method];
+            if (!op) continue;
+            const tag = op.tags?.[0] || 'Outros';
+            const id = op.operationId || `${method}-${slug(path)}`;
+            ops.push({ id, method, path, op, tag, hay: norm([method, path, op.summary, tag, op.description, op.operationId, op['x-permission']].join(' ')) });
+          }
+        }
+        const declared = (spec.tags || []).map((t) => t.name);
+        const tagNames = [...declared, ...new Set(ops.map((o) => o.tag).filter((t) => !declared.includes(t)))];
+        const tagInfo = Object.fromEntries((spec.tags || []).map((t) => [t.name, t]));
+        const groups = tagNames.map((name) => ({ name, id: `tag-${slug(name)}`, ops: ops.filter((o) => o.tag === name) })).filter((g) => g.ops.length);
+
+        const info = spec.info || {};
+        document.title = info.title || document.title;
+        $('#ver').textContent = info.version ? `v${info.version}` : '';
+
+        $('#main').innerHTML = `<section class="intro" id="intro"><h1>${esc(info.title || 'API')}</h1>`
+          + `<p class="sub">OpenAPI ${esc(spec.openapi || '')} · ${ops.length} operações</p>`
+          + `<div class="md">${md(info.description)}</div></section>`
+          + '<p class="counter" id="counter" hidden></p><p class="empty" id="empty" hidden>Nenhuma operação encontrada.</p>'
+          + groups.map((g) => `<section class="tag-section" id="${g.id}" data-tag="${esc(g.name)}"><h2>${esc(g.name)}</h2>`
+            + `${tagInfo[g.name]?.description ? `<p class="tag-desc">${inline(tagInfo[g.name].description)}</p>` : ''}`
+            + g.ops.map(operationHtml).join('') + '</section>').join('');
+
+        $('#nav').innerHTML = '<div class="nav-intro"><a href="#intro">Introdução</a></div>'
+          + groups.map((g) => `<div class="nav-group" data-tag="${esc(g.name)}"><a class="nav-tag" href="#${g.id}">${esc(g.name)}<span class="count">${g.ops.length}</span></a><ul>`
+            + g.ops.map((o) => `<li data-op="${esc(o.id)}"><a href="#${esc(o.id)}" title="${esc(`${o.method.toUpperCase()} ${o.path}`)}"><span class="m m-${o.method}">${o.method.toUpperCase()}</span><span class="nav-sum">${esc(o.op.summary || o.path)}</span></a></li>`).join('')
+            + '</ul></div>').join('');
+
+        for (const o of ops) {
+          o.el = document.getElementById(o.id);
+          o.navEl = document.querySelector(`#nav li[data-op="${CSS.escape(o.id)}"]`);
+        }
+        setupSearch(ops, groups);
+        if (location.hash.length > 1) {
+          const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+          if (target) target.scrollIntoView();
+          markActive(location.hash);
+        }
+      }
+
+      function setupSearch(ops, groups) {
+        const input = $('#q');
+        const apply = () => {
+          const terms = norm(input.value).split(/\s+/).filter(Boolean);
+          let shown = 0;
+          for (const o of ops) {
+            const hit = terms.every((t) => o.hay.includes(t));
+            o.el.hidden = !hit;
+            if (o.navEl) o.navEl.hidden = !hit;
+            if (hit) shown++;
+          }
+          for (const g of groups) {
+            const any = g.ops.some((o) => !o.el.hidden);
+            document.getElementById(g.id).hidden = !any;
+            const nav = document.querySelector(`#nav .nav-group[data-tag="${CSS.escape(g.name)}"]`);
+            if (nav) nav.hidden = !any;
+          }
+          const counter = $('#counter');
+          counter.hidden = !terms.length;
+          counter.textContent = `${shown} de ${ops.length} operações`;
+          $('#empty').hidden = !(terms.length && !shown);
+          $('#intro').hidden = !!terms.length;
+        };
+        input.addEventListener('input', apply);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') { input.value = ''; apply(); input.blur(); }
+        });
+        if (input.value) apply();
+      }
+
+      function markActive(hash) {
+        document.querySelectorAll('#nav a.active').forEach((a) => a.classList.remove('active'));
+        const a = [...document.querySelectorAll('#nav a')].find((x) => x.getAttribute('href') === hash);
+        if (!a) return;
+        a.classList.add('active');
+        // Mantém o item visível no índice (só rola o índice, não a página).
+        const nav = $('#nav');
+        const r = a.getBoundingClientRect();
+        const box = nav.getBoundingClientRect();
+        if (r.top < box.top || r.bottom > box.bottom) nav.scrollTop += r.top - box.top - box.height / 3;
+      }
+
+      // Campos recolhidos só são montados ao abrir.
+      document.addEventListener('toggle', (e) => {
+        const el = e.target;
+        if (!(el instanceof HTMLDetailsElement) || !el.open || !el.dataset.lazy) return;
+        const entry = lazy.get(el.dataset.lazy);
+        if (!entry) return;
+        el.querySelector('.sub-body').innerHTML = renderSchema(entry[0], entry[1]);
+        lazy.delete(el.dataset.lazy);
+      }, true);
+
+      // ---- índice no celular ----
+      const setNav = (open) => {
+        document.body.classList.toggle('nav-open', open);
+        $('#menu').setAttribute('aria-expanded', String(open));
+      };
+      $('#menu').addEventListener('click', () => setNav(!document.body.classList.contains('nav-open')));
+      $('#backdrop').addEventListener('click', () => setNav(false));
+      $('#nav').addEventListener('click', (e) => { if (e.target.closest('a')) setNav(false); });
+      window.addEventListener('hashchange', () => markActive(location.hash));
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') setNav(false);
+        if (e.key === '/' && !/^(input|textarea|select)$/i.test(document.activeElement?.tagName || '')) {
+          e.preventDefault();
+          $('#q').focus();
+        }
+      });
+
+      // Altura do topo (muda quando a busca quebra de linha no celular).
+      const top = $('#top');
+      const setTop = () => document.documentElement.style.setProperty('--top-h', `${top.offsetHeight}px`);
+      new ResizeObserver(setTop).observe(top);
+      setTop();
+
+      fetch('/api/openapi.json', { headers: { accept: 'application/json' } })
+        .then((res) => {
+          if (!res.ok) throw new Error(`O servidor respondeu ${res.status}`);
+          return res.json();
+        })
+        .then((data) => { spec = data; render(); })
+        .catch((e) => {
+          $('#main').innerHTML = `<p class="status error">Não foi possível carregar <code>/api/openapi.json</code>: ${esc(e.message)}</p>`;
+        });
+    })();
+  </script>
+</body>
+</html>

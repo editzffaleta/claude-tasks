@@ -1,17 +1,21 @@
-// Chat com o Claude dentro do painel. O servidor roda a CLI do Claude Code só com o MCP "tarefas".
+// Chat com o Claude dentro do painel. O servidor usa o provedor escolhido em Configurações
+// (CLI do Claude Code, API da Anthropic ou compatível com OpenAI) com as ferramentas do MCP.
 import { api, attempt, stream } from './api.js';
 import { openTask } from './drawer.js';
+import { t } from './i18n.js';
 import { state, load, currentProject } from './state.js';
 import { $, ICON, esc, md } from './util.js';
 
-const SUGGESTIONS = [
+// Sugestões são enviadas ao Claude já traduzidas (ele responde no idioma da pergunta).
+const SUGGESTIONS = /* i18n */ [
   'O que está atrasado ou vence esta semana?',
   'Resuma o que ficou pendente em cada projeto',
   'Cria uma tarefa urgente: revisar o deploy de sexta',
   'Organiza as tarefas abertas deste projeto numa sprint de 2 semanas',
 ];
 
-const TOOL_LABEL = {
+// Ferramentas do MCP usadas numa resposta (completam a frase "o Claude …").
+const TOOL_LABEL = /* i18n */ {
   add_tasks: 'criou tarefas',
   list_tasks: 'consultou tarefas',
   get_task: 'leu uma tarefa',
@@ -22,6 +26,31 @@ const TOOL_LABEL = {
   log_time: 'registrou tempo',
   attach_file: 'anexou arquivo',
   list_members: 'consultou a equipe',
+  update_tasks: 'atualizou tarefas',
+  delete_tasks: 'excluiu tarefas',
+  add_comment: 'comentou',
+  manage_comment: 'mexeu num comentário',
+  get_overview: 'leu o resumo',
+  get_activity: 'consultou a atividade',
+  search: 'buscou no quadro',
+  manage_project: 'mexeu no projeto',
+  manage_columns: 'mexeu nas colunas',
+  manage_labels: 'mexeu nas labels',
+  manage_fields: 'mexeu nos campos',
+  manage_members: 'mexeu nos membros',
+  manage_workspaces: 'mexeu nos workspaces',
+  manage_automations: 'mexeu nas automações',
+  manage_settings: 'mexeu nas configurações',
+  manage_inbox: 'mexeu na caixa de entrada',
+  share_link: 'criou um link público',
+  export_tasks: 'exportou tarefas',
+  import_tasks: 'importou tarefas',
+  show_in_dashboard: 'abriu no painel',
+  timer: 'mexeu no timer',
+  time_report: 'leu o relatório de tempo',
+  send_notification: 'enviou uma notificação',
+  list_notifications: 'leu as notificações',
+  get_attachment: 'leu um anexo',
 };
 
 let messages = [];
@@ -32,7 +61,7 @@ const linkify = (html) => html.replace(/(^|[\s(>])#(\d+)\b/g, '$1<button class="
 
 function bubble(m) {
   if (m.role === 'user') return `<div class="msg user"><div class="bubble">${esc(m.body)}</div></div>`;
-  const tools = (m.tools || []).map((t) => `<span class="tool-chip">${ICON.check}${TOOL_LABEL[t] || t}</span>`).join('');
+  const tools = (m.tools || []).map((name) => `<span class="tool-chip">${ICON.check}${esc(TOOL_LABEL[name] ? t(TOOL_LABEL[name]) : name)}</span>`).join('');
   return `
     <div class="msg assistant">
       <span class="avatar claude">${ICON.claude}</span>
@@ -52,8 +81,10 @@ function renderMessages() {
   box.innerHTML = messages.length ? messages.map(bubble).join('') : `
     <div class="chat-empty">
       <span class="avatar claude big">${ICON.claude}</span>
-      <p><b>Peça ao Claude para mexer no quadro.</b><br>Ele cria, organiza, prioriza e conclui tarefas${project ? ` em <b>${esc(project.name)}</b>` : ''} usando as mesmas ferramentas das suas sessões.</p>
-      <div class="suggestions">${SUGGESTIONS.map((s) => `<button class="chip-btn" data-suggest="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+      <p><b>${t('Peça ao Claude para mexer no quadro.')}</b><br>${project
+    ? t('Ele cria, organiza, prioriza e conclui tarefas em {project} usando as mesmas ferramentas das suas sessões.', { project: `<b>${esc(project.name)}</b>` })
+    : t('Ele cria, organiza, prioriza e conclui tarefas usando as mesmas ferramentas das suas sessões.')}</p>
+      <div class="suggestions">${SUGGESTIONS.map((s) => t(s)).map((s) => `<button class="chip-btn" data-suggest="${esc(s)}">${esc(s)}</button>`).join('')}</div>
     </div>`;
   box.scrollTop = box.scrollHeight;
 }
@@ -62,15 +93,15 @@ function render() {
   $('#chat').innerHTML = `
     <div class="chat-head">
       <span class="avatar claude">${ICON.claude}</span>
-      <div><b>Claude</b><div class="muted small">usa o MCP do quadro</div></div>
+      <div><b>Claude</b><div class="muted small">${t('usa o MCP do quadro')}</div></div>
       <span class="spacer"></span>
-      <button class="icon-btn small" data-action="reset" title="Nova conversa">${ICON.plus}</button>
-      <button class="icon-btn small" data-action="close" title="Fechar (C)">${ICON.close}</button>
+      <button class="icon-btn small" data-action="reset" title="${esc(t('Nova conversa'))}" aria-label="${esc(t('Nova conversa'))}">${ICON.plus}</button>
+      <button class="icon-btn small" data-action="close" title="${esc(t('Fechar (C)'))}" aria-label="${esc(t('Fechar'))}">${ICON.close}</button>
     </div>
     <div class="chat-messages" id="chat-messages"></div>
     <form class="chat-input" data-form="chat">
-      <textarea name="message" rows="2" placeholder="Ex.: move as tarefas de UI do SIRAC para a próxima sprint" ${busy ? 'disabled' : ''}></textarea>
-      <button class="btn primary icon-only" type="submit" aria-label="Enviar" ${busy ? 'disabled' : ''}>${ICON.send}</button>
+      <textarea name="message" rows="2" placeholder="${esc(t('Ex.: move as tarefas de UI do SIRAC para a próxima sprint'))}" aria-label="${esc(t('Mensagem para o Claude'))}" ${busy ? 'disabled' : ''}></textarea>
+      <button class="btn primary icon-only" type="submit" aria-label="${esc(t('Enviar'))}" ${busy ? 'disabled' : ''}>${ICON.send}</button>
     </form>`;
   renderMessages();
 }
@@ -102,14 +133,14 @@ async function send(text) {
     await stream('/api/chat', { message, project_id: state.projectId }, (ev) => {
       if (ev.type === 'text') reply.body += (reply.body ? '\n\n' : '') + ev.text;
       if (ev.type === 'tool') { reply.tools.push(ev.name); load(); }
-      if (ev.type === 'error') reply.error = ev.message;
+      if (ev.type === 'error') reply.error = t(ev.message);
       renderMessages();
     }, controller.signal);
   } catch (e) {
     if (e.name !== 'AbortError') reply.error = e.message;
   }
   reply.pending = false;
-  if (!reply.body && !reply.tools.length && !reply.error) reply.error = 'Sem resposta.';
+  if (!reply.body && !reply.tools.length && !reply.error) reply.error = t('Sem resposta.');
   busy = false;
   controller = null;
   render();

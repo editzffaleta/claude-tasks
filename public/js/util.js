@@ -1,4 +1,5 @@
 // Helpers de DOM, datas, formatação, markdown e ícones.
+import { lang, locale, t, tn } from './i18n.js';
 
 export const $ = (sel, el = document) => el.querySelector(sel);
 export const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
@@ -6,15 +7,56 @@ export const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const tilde = (p) => String(p || '').replace(/^\/Users\/[^/]+/, '~');
 
+// Rótulos traduzidos na hora do uso: L.status.todo etc. (getters chamam t()).
+const labels = (map) => new Proxy(map, { get: (m, k) => (k in m ? t(m[k]) : undefined) });
+
 export const STATUSES = ['todo', 'doing', 'blocked', 'done'];
-export const STATUS_LABEL = { todo: 'A fazer', doing: 'Em andamento', blocked: 'Bloqueada', done: 'Concluída' };
-export const COLUMN_LABEL = { todo: 'A fazer', doing: 'Em andamento', blocked: 'Bloqueadas', done: 'Concluídas' };
-export const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
-export const PRIORITY_LABEL = { urgent: 'Urgente', high: 'Alta', medium: 'Média', low: 'Baixa' };
-export const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
+export const STATUS_LABEL = labels({ todo: 'A fazer', doing: 'Em andamento', blocked: 'Bloqueada', done: 'Concluída' });
+// Nomes das colunas padrão (os mesmos que o servidor dá às colunas de um projeto sem colunas próprias).
+const COLUMN_NAMES = /* i18n */ { todo: 'A fazer', doing: 'Em andamento', blocked: 'Bloqueadas', done: 'Concluídas' };
+export const COLUMN_LABEL = labels(COLUMN_NAMES);
+// Coluna com o nome padrão (vindo do servidor em português) aparece traduzida; nome próprio fica como está.
+export const columnLabel = (name, status) => (!name || name === COLUMN_NAMES[status] ? COLUMN_LABEL[status] ?? name : name);
+export const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'lowest'];
+export const PRIORITY_LABEL = labels({ urgent: 'Urgente', high: 'Alta', medium: 'Média', low: 'Baixa', lowest: 'Mínima' });
+export const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3, lowest: 4 };
 export const TYPES = ['task', 'bug', 'story', 'epic'];
-export const TYPE_LABEL = { task: 'Tarefa', bug: 'Bug', story: 'História', epic: 'Épico' };
-export const FREQ_LABEL = { daily: 'Diária', weekly: 'Semanal', monthly: 'Mensal', yearly: 'Anual' };
+export const TYPE_LABEL = labels({ task: 'Tarefa', bug: 'Bug', story: 'História', epic: 'Épico' });
+export const FREQS = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'];
+export const FREQ_LABEL = labels({ daily: 'Diária', weekly: 'Semanal', monthly: 'Mensal', quarterly: 'Trimestral', yearly: 'Anual' });
+export const DEPENDENCY_TYPES = ['finish_start', 'start_start', 'finish_finish', 'start_finish'];
+export const DEPENDENCY_LABEL = labels({
+  finish_start: 'Termina → começa',
+  start_start: 'Começa → começa',
+  finish_finish: 'Termina → termina',
+  start_finish: 'Começa → termina',
+});
+export const DEPENDENCY_HINT = labels({
+  finish_start: 'Esta só começa quando a outra terminar',
+  start_start: 'Esta só começa quando a outra começar',
+  finish_finish: 'Esta só termina quando a outra terminar',
+  start_finish: 'Esta só termina quando a outra começar',
+});
+export const ROLES = ['owner', 'manager', 'member', 'viewer'];
+export const ROLE_LABEL = labels({ owner: 'Dono', manager: 'Gerente', member: 'Membro', viewer: 'Visualizador' });
+export const USER_ROLE_LABEL = labels({ admin: 'Administrador', member: 'Membro', viewer: 'Visualizador' });
+export const PROJECT_STATUSES = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
+export const PROJECT_STATUS_LABEL = labels({ planning: 'Planejamento', active: 'Ativo', on_hold: 'Em espera', completed: 'Concluído', cancelled: 'Cancelado' });
+export const VISIBILITIES = ['private', 'internal', 'public'];
+export const VISIBILITY_LABEL = labels({ private: 'Privado', internal: 'Interno', public: 'Público' });
+export const VISIBILITY_HINT = labels({
+  private: 'Só os membros do projeto veem',
+  internal: 'Todas as contas do quadro veem',
+  public: 'Todos do quadro veem, e dá para gerar um link público de leitura',
+});
+export const FIELD_TYPES = ['text', 'number', 'date', 'boolean', 'select', 'multi_select', 'user', 'url'];
+export const FIELD_TYPE_LABEL = labels({
+  text: 'Texto', number: 'Número', date: 'Data', boolean: 'Sim/não', select: 'Lista', multi_select: 'Lista (várias)', user: 'Pessoa', url: 'Link',
+});
+export const SPRINT_STATUS_LABEL = labels({ planning: 'Planejada', active: 'Ativa', completed: 'Concluída', cancelled: 'Cancelada' });
+
+// Referência curta da tarefa: chave do projeto (WEB-12) ou #id.
+export const taskRef = (task) => task?.ref || `#${task?.id}`;
 
 // ---------- cores ----------
 
@@ -28,9 +70,25 @@ export const projectColor = (p) => p?.color || p?.project_color || color(p?.name
 
 // ---------- datas (AAAA-MM-DD, fuso local) ----------
 
-const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-export const MONTHS_LONG = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-export const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+// Nomes de meses e dias no idioma atual (recalculados quando o idioma muda).
+const cache = {};
+function names(kind) {
+  const key = `${kind}:${locale()}`;
+  if (!cache[key]) {
+    const fmt = {
+      month: new Intl.DateTimeFormat(locale(), { month: 'short' }),
+      monthLong: new Intl.DateTimeFormat(locale(), { month: 'long' }),
+      weekday: new Intl.DateTimeFormat(locale(), { weekday: 'short' }),
+    }[kind];
+    cache[key] = kind === 'weekday'
+      ? Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 7 + i)).replace('.', ''))
+      : Array.from({ length: 12 }, (_, i) => fmt.format(new Date(2024, i, 15)).replace('.', ''));
+  }
+  return cache[key];
+}
+export const monthNames = () => names('month');
+export const monthNamesLong = () => names('monthLong');
+export const weekdayNames = () => names('weekday');
 
 export function localDate(d = new Date()) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -43,29 +101,32 @@ export function fmtDate(s, { year } = {}) {
   if (!s) return '';
   const [y, m, d] = s.split('-').map(Number);
   const showYear = year ?? y !== new Date().getFullYear();
-  return `${d} ${MONTHS[m - 1]}${showYear ? ` ${y}` : ''}`;
+  return `${d} ${monthNames()[m - 1]}${showYear ? ` ${y}` : ''}`;
 }
 
-const rtf = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
-export const dtf = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeStyle: 'short' });
+export const dtf = { format: (d) => new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeStyle: 'short' }).format(d) };
 
 export function ago(iso) {
   if (!iso) return '';
+  const rtf = new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' });
   const s = (new Date(iso) - Date.now()) / 1000;
   for (const [unit, n] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]]) {
     if (Math.abs(s) >= n) return rtf.format(Math.round(s / n), unit);
   }
-  return 'agora';
+  return t('agora');
 }
 
+export const fmtNumber = (n, opts) => new Intl.NumberFormat(locale(), opts).format(n ?? 0);
+
 // Rótulo e classe do prazo: overdue / today / soon / ''.
-export function dueInfo(t, today) {
-  if (!t.due_date) return null;
-  const diff = daysBetween(today, t.due_date);
-  const done = t.status === 'done';
-  const text = diff === 0 ? 'Hoje' : diff === 1 ? 'Amanhã' : diff === -1 ? 'Ontem' : fmtDate(t.due_date);
+export function dueInfo(task, today) {
+  if (!task.due_date) return null;
+  const diff = daysBetween(today, task.due_date);
+  const done = task.status === 'done';
+  const text = diff === 0 ? t('Hoje') : diff === 1 ? t('Amanhã') : diff === -1 ? t('Ontem') : fmtDate(task.due_date);
   const cls = done ? '' : diff < 0 ? 'overdue' : diff === 0 ? 'today' : diff <= 2 ? 'soon' : '';
-  const title = done ? `Prazo ${fmtDate(t.due_date, { year: true })}` : diff < 0 ? `Atrasada há ${-diff} dia(s)` : diff === 0 ? 'Vence hoje' : `Vence em ${diff} dia(s)`;
+  const title = done ? t('Prazo {d}', { d: fmtDate(task.due_date, { year: true }) })
+    : diff < 0 ? tn(-diff, 'Atrasada há {n} dia', 'Atrasada há {n} dias') : diff === 0 ? t('Vence hoje') : tn(diff, 'Vence em {n} dia', 'Vence em {n} dias');
   return { text, cls, title };
 }
 
@@ -86,46 +147,132 @@ export function fmtClock(sec) {
   return `${h ? `${h}:` : ''}${String(m).padStart(h ? 2 : 1, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// "A cada 2 semanas (seg, qua), 1 de 5 até 3 nov": cada parte é uma frase própria com marcadores.
+const EVERY = /* i18n */ {
+  daily: 'A cada {n} dias', weekly: 'A cada {n} semanas', monthly: 'A cada {n} meses', quarterly: 'A cada {n} trimestres', yearly: 'A cada {n} anos',
+};
 export function describeRecurrence(r) {
   if (!r) return '';
-  const unit = { daily: ['dia', 'dias'], weekly: ['semana', 'semanas'], monthly: ['mês', 'meses'], yearly: ['ano', 'anos'] }[r.freq];
-  const base = r.interval > 1 ? `A cada ${r.interval} ${unit[1]}` : FREQ_LABEL[r.freq];
-  return r.until ? `${base} até ${fmtDate(r.until)}` : base;
+  let base = r.interval > 1 && EVERY[r.freq] ? t(EVERY[r.freq], { n: r.interval }) : FREQ_LABEL[r.freq];
+  if (r.weekdays?.length) base += ` (${r.weekdays.map((d) => weekdayNames()[d]).join(', ')})`;
+  if (r.monthday) base += r.monthday === 'last' ? ` (${t('último dia')})` : ` (${t('dia {n}', { n: r.monthday })})`;
+  if (r.count) base += `, ${t('{n} de {total}', { n: r.n || 1, total: r.count })}`;
+  return r.until ? t('{base} até {d}', { base, d: fmtDate(r.until) }) : base;
 }
 
-// ---------- markdown mínimo ----------
-// Parágrafos, listas, títulos, `código`, **negrito**, [links](url) e ![imagens](url).
+// Texto de um evento do histórico. O servidor grava o evento já em português (src/db.js logEvent);
+// aqui os formatos conhecidos são remontados no idioma atual, e o resto aparece como veio.
+const SERVER_STATUS = { 'a fazer': 'todo', 'em andamento': 'doing', bloqueada: 'blocked', 'concluída': 'done' };
+const SERVER_PRIORITY = { 'mínima': 'lowest', baixa: 'low', 'média': 'medium', alta: 'high', urgente: 'urgent' };
+const EVENT_FIXED = /* i18n */ ['prazo removido', 'removida da sprint', 'arquivada', 'desarquivada', 'relator removido', 'recorrência encerrada'];
+export function eventText(body) {
+  const s = String(body ?? '');
+  if (lang() === 'pt') return s;
+  if (EVENT_FIXED.includes(s)) return t(s);
+  let m = s.match(/^(.+) → (.+)$/);
+  if (m && SERVER_STATUS[m[1]] && SERVER_STATUS[m[2]]) return `${STATUS_LABEL[SERVER_STATUS[m[1]]]} → ${STATUS_LABEL[SERVER_STATUS[m[2]]]}`;
+  m = s.match(/^prioridade (.+) → (.+)$/);
+  if (m && SERVER_PRIORITY[m[1]] && SERVER_PRIORITY[m[2]]) {
+    return t('prioridade {from} → {to}', { from: PRIORITY_LABEL[SERVER_PRIORITY[m[1]]].toLowerCase(), to: PRIORITY_LABEL[SERVER_PRIORITY[m[2]]].toLowerCase() });
+  }
+  if ((m = s.match(/^prazo definido para (\d{4}-\d{2}-\d{2})$/))) return t('prazo definido para {d}', { d: fmtDate(m[1], { year: true }) });
+  if ((m = s.match(/^movida de (.+) para (.+)$/))) return t('movida de {from} para {to}', { from: m[1], to: m[2] });
+  if ((m = s.match(/^sprint: (.+)$/))) return t('sprint: {name}', { name: m[1] });
+  if ((m = s.match(/^relator: (.+)$/))) return t('relator: {name}', { name: m[1] });
+  if ((m = s.match(/^recorrência encerrada \((\d+) ocorrências\)$/))) return tn(Number(m[1]), 'recorrência encerrada ({n} ocorrência)', 'recorrência encerrada ({n} ocorrências)');
+  if ((m = s.match(/^próxima ocorrência: #(\d+) com prazo (\d{4}-\d{2}-\d{2})$/))) return t('próxima ocorrência: #{id} com prazo {d}', { id: m[1], d: fmtDate(m[2], { year: true }) });
+  if ((m = s.match(/^criada pela recorrência de #(\d+)$/))) return t('criada pela recorrência de #{id}', { id: m[1] });
+  if ((m = s.match(/^automação “(.+)”$/))) return t('automação “{name}”', { name: m[1] });
+  return s;
+}
 
-export function md(src) {
-  const safeUrl = (u) => (/^(https?:|\/api\/attachments\/)/.test(u) ? u : '#');
-  const inline = (s) => s
+// Texto de uma notificação. Como os eventos, o servidor grava o aviso em português (src/engine.js);
+// os formatos conhecidos são remontados no idioma atual, e os demais (mensagens de automações e do Claude) ficam como vieram.
+const serverActor = (name) => (name === 'Alguém' ? t('Alguém') : name === 'Uma automação' ? t('Uma automação') : name);
+const dayMonth = (dd, mm) => fmtDate(`${new Date().getFullYear()}-${mm}-${dd}`);
+export function notificationText(body) {
+  const s = String(body ?? '');
+  if (lang() === 'pt') return s;
+  let m;
+  if ((m = s.match(/^(.+?) mudou #(\d+) para "(.+?)": (.*)$/s)) && SERVER_STATUS[m[3]]) {
+    return t('{who} mudou #{id} para “{status}”: {title}', { who: serverActor(m[1]), id: m[2], status: STATUS_LABEL[SERVER_STATUS[m[3]]], title: m[4] });
+  }
+  if ((m = s.match(/^(.+?) mencionou você em #(\d+): (.*)$/s))) return t('{who} mencionou você em #{id}: {text}', { who: serverActor(m[1]), id: m[2], text: m[3] });
+  if ((m = s.match(/^(.+?) comentou em #(\d+): (.*)$/s))) return t('{who} comentou em #{id}: {text}', { who: serverActor(m[1]), id: m[2], text: m[3] });
+  if ((m = s.match(/^(.+?) atribuiu #(\d+) a você: (.*)$/s))) return t('{who} atribuiu #{id} a você: {title}', { who: serverActor(m[1]), id: m[2], title: m[3] });
+  if ((m = s.match(/^Atrasada: #(\d+) (.*) \(prazo (\d{2})\/(\d{2})\)$/s))) return t('Atrasada: #{id} {title} (prazo {d})', { id: m[1], title: m[2], d: dayMonth(m[3], m[4]) });
+  if ((m = s.match(/^Vence hoje: #(\d+) (.*)$/s))) return t('Vence hoje: #{id} {title}', { id: m[1], title: m[2] });
+  if ((m = s.match(/^Vence amanhã: #(\d+) (.*)$/s))) return t('Vence amanhã: #{id} {title}', { id: m[1], title: m[2] });
+  if ((m = s.match(/^Vence em (\d{2})\/(\d{2}): #(\d+) (.*)$/s))) return t('Vence em {d}: #{id} {title}', { d: dayMonth(m[1], m[2]), id: m[3], title: m[4] });
+  return s;
+}
+
+// ---------- markdown ----------
+// Títulos, parágrafos, listas (com caixas ☐/☑), citações, blocos de código, `código`,
+// **negrito**, *itálico*, ~~riscado~~, [links](url), ![imagens](url), @menções e linhas ---.
+
+const safeUrl = (u) => (/^(https?:|mailto:|\/api\/attachments\/|\/api\/public\/)/.test(u) ? u : '#');
+
+function inline(s, { mentions = [] } = {}) {
+  const codes = [];
+  s = s.replace(/`([^`]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`);
+  s = s
     .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) => `<img src="${safeUrl(url)}" alt="${alt}" loading="lazy">`)
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, url) => `<a href="${safeUrl(url)}" target="_blank" rel="noopener">${text}</a>`)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    .replace(/(^|[\s(])(https?:\/\/[^\s<]+[^\s<.,;:!?)])/g, (_, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`)
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^\w*])\*([^*\s][^*]*)\*(?!\w)/g, '$1<i>$2</i>')
+    .replace(/~~([^~]+)~~/g, '<s>$1</s>')
+    .replace(/(^|[\s(])@([\p{L}\p{N}._-]+(?:\s[\p{Lu}][\p{L}]+)?)/gu, (m, pre, name) => {
+      const hit = mentions.find((n) => name.toLowerCase().startsWith(n.toLowerCase().split(' ')[0]));
+      return hit ? `${pre}<span class="mention">@${name}</span>` : m;
+    });
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[i]}</code>`);
+}
+
+export function md(src, opts = {}) {
   let html = '';
   let para = [];
-  let inList = false;
+  let list = null;
+  let quote = [];
+  let code = null;
   const flush = () => {
-    if (para.length) html += `<p>${para.map(inline).join('<br>')}</p>`;
+    if (para.length) html += `<p>${para.map((l) => inline(l, opts)).join('<br>')}</p>`;
     para = [];
   };
+  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
+  const closeQuote = () => {
+    if (quote.length) html += `<blockquote>${quote.map((l) => inline(l, opts)).join('<br>')}</blockquote>`;
+    quote = [];
+  };
   for (const line of esc(src).split('\n')) {
-    const item = line.match(/^\s*(?:[-*]|\d+[.)])\s+(.*)/);
-    const head = line.match(/^#{1,4}\s+(.*)/);
-    if (item) {
-      flush();
-      if (!inList) { html += '<ul>'; inList = true; }
-      html += `<li>${inline(item[1].replace(/^\[( |x)\]\s*/i, (_, x) => (x.trim() ? '☑ ' : '☐ ')))}</li>`;
+    if (code !== null) {
+      if (/^```/.test(line)) { html += `<pre><code>${code.join('\n')}</code></pre>`; code = null; } else code.push(line);
       continue;
     }
-    if (inList) { html += '</ul>'; inList = false; }
-    if (head) { flush(); html += `<h4>${inline(head[1])}</h4>`; }
-    else if (!line.trim()) flush();
+    if (/^```/.test(line)) { flush(); closeList(); closeQuote(); code = []; continue; }
+    const q = line.match(/^&gt;\s?(.*)/);
+    if (q) { flush(); closeList(); quote.push(q[1]); continue; }
+    closeQuote();
+    const bullet = line.match(/^\s*[-*+]\s+(.*)/);
+    const num = line.match(/^\s*\d+[.)]\s+(.*)/);
+    if (bullet || num) {
+      flush();
+      const kind = bullet ? 'ul' : 'ol';
+      if (list !== kind) { closeList(); html += `<${kind}>`; list = kind; }
+      const text = (bullet || num)[1].replace(/^\[( |x)\]\s*/i, (_, x) => `<span class="md-check ${x.trim() ? 'on' : ''}">${x.trim() ? '☑' : '☐'}</span> `);
+      html += `<li>${inline(text, opts)}</li>`;
+      continue;
+    }
+    closeList();
+    const head = line.match(/^(#{1,4})\s+(.*)/);
+    if (head) { flush(); html += `<h4>${inline(head[2], opts)}</h4>`; } else if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flush(); html += '<hr>'; } else if (!line.trim()) flush();
     else para.push(line);
   }
+  if (code !== null) html += `<pre><code>${code.join('\n')}</code></pre>`;
   flush();
-  if (inList) html += '</ul>';
+  closeList();
+  closeQuote();
   return html;
 }
 
@@ -178,6 +325,28 @@ export const ICON = {
   blocked: svg('<circle cx="8" cy="8" r="5.6"/><path d="M4.1 11.9l7.8-7.8"/>'),
   up: svg('<path d="M8 13V3M4 7l4-4 4 4"/>'),
   edit: svg('<path d="M10.5 2.5l3 3-8 8H2.5v-3z"/>'),
+  building: svg('<rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 5h1M9 5h1M6 8h1M9 8h1M7 14v-3h2v3"/>'),
+  layers: svg('<path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/>'),
+  share: svg('<circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="4" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M5.6 7.1l4.8-2.3M5.6 8.9l4.8 2.3"/>'),
+  history: svg('<path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.6h2.6"/><path d="M8 5v3.2l2 1.3"/>'),
+  shield: svg('<path d="M8 1.8l5 2v4.1c0 3-2.1 5.3-5 6.3-2.9-1-5-3.3-5-6.3V3.8z"/>'),
+  mail: svg('<rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M2.5 4.5L8 9l5.5-4.5"/>'),
+  download: svg('<path d="M8 2.5v8M5 7.5l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/>'),
+  eye: svg('<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>'),
+  at: svg('<circle cx="8" cy="8" r="2.6"/><path d="M10.6 8v1a1.9 1.9 0 0 0 3.8 0V8A6.4 6.4 0 1 0 11 13.6"/>'),
+  tag: svg('<path d="M2.5 2.5h5.3l5.7 5.7-5.3 5.3-5.7-5.7z"/><circle cx="5.3" cy="5.3" r=".9" fill="currentColor"/>'),
+  sliders: svg('<path d="M3 4h6M12 4h1M3 8h1M7 8h6M3 12h7M13 12h0"/><circle cx="10.5" cy="4" r="1.5"/><circle cx="5.5" cy="8" r="1.5"/><circle cx="11.5" cy="12" r="1.5"/>'),
+  globe: svg('<circle cx="8" cy="8" r="5.8"/><path d="M2.2 8h11.6M8 2.2c1.6 1.6 2.4 3.5 2.4 5.8S9.6 12.2 8 13.8C6.4 12.2 5.6 10.3 5.6 8S6.4 3.8 8 2.2z"/>'),
+  reply: svg('<path d="M6.5 4L2.5 8l4 4M2.5 8h7a4 4 0 0 1 4 4v.5"/>'),
+  points: svg('<path d="M8 2l1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1L2 6.3l4.2-.5z"/>'),
+  key: svg('<circle cx="5.5" cy="10.5" r="3"/><path d="M7.7 8.3L13.5 2.5M11.5 4.5l1.5 1.5M10 6l1.2 1.2"/>'),
+  inbox: svg('<path d="M2 9.5l1.8-6h8.4L14 9.5v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M2 9.5h3.5l1 1.5h3l1-1.5H14"/>'),
+  command: svg('<path d="M5.5 5.5h5v5h-5zM5.5 5.5V4a1.5 1.5 0 1 0-1.5 1.5zM10.5 5.5H12A1.5 1.5 0 1 0 10.5 4zM10.5 10.5V12a1.5 1.5 0 1 0 1.5-1.5zM5.5 10.5H4A1.5 1.5 0 1 0 5.5 12z"/>'),
+  bold: svg('<path d="M4.5 3h4a2.5 2.5 0 0 1 0 5h-4zM4.5 8h4.8a2.5 2.5 0 0 1 0 5H4.5z"/>'),
+  italic: svg('<path d="M7 3h5M4 13h5M9.5 3l-3 10"/>'),
+  code: svg('<path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/>'),
+  checklist: svg('<rect x="2" y="2.5" width="4" height="4" rx="1"/><path d="M2.8 11.2l1.2 1.2 2-2.4M8.5 4.5h5.5M8.5 11.5h5.5"/>'),
+  quote: svg('<path d="M3 4v8M6 5.5h7M6 8h7M6 10.5h5"/>'),
 };
 
 export function statusIcon(status) {
@@ -191,11 +360,11 @@ export function statusIcon(status) {
 }
 
 export function prioIcon(priority) {
-  const title = `Prioridade ${PRIORITY_LABEL[priority].toLowerCase()}`;
+  const title = t('Prioridade {p}', { p: PRIORITY_LABEL[priority].toLowerCase() });
   if (priority === 'urgent') {
     return `<span class="prio urgent" title="${title}"><svg viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="3"/><path d="M7 4v3.8M7 10v.1"/></svg></span>`;
   }
-  const n = { low: 1, medium: 2, high: 3 }[priority];
+  const n = { lowest: 0, low: 1, medium: 2, high: 3 }[priority];
   const bar = (i, x, y, h) => `<rect class="${n >= i ? 'on' : ''}" x="${x}" y="${y}" width="2.6" height="${h}" rx="1"/>`;
   return `<span class="prio ${priority}" title="${title}"><svg viewBox="0 0 14 14">${bar(1, 1.5, 8, 4.5)}${bar(2, 5.7, 5, 7.5)}${bar(3, 9.9, 2, 10.5)}</svg></span>`;
 }
@@ -213,8 +382,23 @@ export function typeIcon(type, { always = false } = {}) {
 
 export function avatar(user, { size = 20 } = {}) {
   if (!user) return '';
+  if (user.avatar) return `<img class="avatar img" src="/api/avatars/${esc(user.avatar)}" alt="" style="--s:${size}px" title="${esc(user.name)}">`;
   const initials = user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   return `<span class="avatar" style="--c:${user.color || color(user.name)};--s:${size}px" title="${esc(user.name)}">${esc(initials)}</span>`;
+}
+
+// Selo de projeto/organização: imagem enviada ou bolinha colorida.
+export function projectBadge(p, { size = 10 } = {}) {
+  if (p?.avatar) return `<img class="badge-img" src="/api/avatars/${esc(p.avatar)}" alt="" style="--s:${Math.max(size, 14)}px">`;
+  return `<span class="dot" style="--c:${projectColor(p)}"></span>`;
+}
+
+export const fmtPoints = (n) => (n == null ? '' : tn(n, '{n} ponto', '{n} pontos', { n: fmtNumber(n) }));
+
+// Tema: "system" segue o sistema operacional; light/dark fixam.
+export function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
 }
 
 export function debounce(fn, ms = 200) {

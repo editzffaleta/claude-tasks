@@ -1,17 +1,44 @@
-// Configurações, estatísticas do dashboard, feed de atividade e cadastro de automações.
-import { ACTIONS, PRIORITIES, STATUSES, TRIGGERS, addDays, cleanEnum, cleanText, fail, localDate, now, today } from '../util.js';
+// Configurações, estatísticas do dashboard, relatório de tempo, atividade, automações e chat.
+import {
+  ACTIONS, MESSAGE_ACTIONS, PRIORITIES, SPRINT_TRIGGERS, STATUSES, TRIGGERS, TYPES,
+  addDays, cleanEnum, cleanText, fail, localDate, now, today,
+} from '../util.js';
 
 export const DEFAULT_SETTINGS = {
   notify_macos: true,
   due_soon_days: 1,
   chat_model: 'sonnet',
+  base_url: '',
+  default_language: 'pt',
+  // e-mail (SMTP)
+  smtp_host: '',
+  smtp_port: 587,
+  smtp_secure: false,
+  smtp_user: '',
+  smtp_pass: '',
+  smtp_from: '',
+  smtp_allow_insecure: false,
+  // IA do chat do painel: claude-cli (assinatura, sem chave), anthropic ou openai (compatível: OpenAI, OpenRouter, Ollama…)
+  ai_provider: 'claude-cli',
+  ai_base_url: '',
+  ai_api_key: '',
+  ai_model: '',
 };
+
+// Guardados cifrados; a API devolve só se estão preenchidos.
+export const SECRET_SETTINGS = ['smtp_pass', 'ai_api_key'];
 
 function mondayOf(date) {
   const d = new Date(`${date}T12:00:00`);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return localDate(d);
 }
+
+const scopeSql = (col, project_id, project_ids) => {
+  if (project_id) return { sql: `AND ${col} = ?`, args: [project_id] };
+  if (Array.isArray(project_ids)) return { sql: `AND ${col} IN (${project_ids.length ? project_ids.map(Number).join(',') : '-1'})`, args: [] };
+  return { sql: '', args: [] };
+};
 
 function parseAutomation(row) {
   if (!row) return row;
@@ -25,30 +52,44 @@ function cleanAutomation(input, current = {}) {
   if (!action || !ACTIONS[action.type]) fail('Escolha uma ação válida');
   if (action.type === 'set_status') cleanEnum(action.value, 'action.value', STATUSES);
   if (action.type === 'set_priority') cleanEnum(action.value, 'action.value', PRIORITIES);
-  if (['add_tag', 'remove_tag', 'add_comment', 'notify', 'assign'].includes(action.type) && !String(action.value ?? '').trim()) {
+  if (['add_tag', 'remove_tag', 'add_comment', 'notify', 'assign', 'send_email', 'set_column', 'move_to_sprint'].includes(action.type) && !String(action.value ?? '').trim()) {
     fail('Preencha o valor da ação');
   }
+  if (action.type === 'send_email' && action.to && !String(action.to).trim()) fail('Informe os destinatários do e-mail');
   if (action.type === 'set_due_in_days' && !(Number(action.value) >= 0)) fail('Informe em quantos dias');
   if (trigger === 'status_changed' && action.type === 'set_status') fail('Gatilho e ação não podem ser ambos de status (entraria em ciclo)');
+  if (trigger === 'project_created' && !MESSAGE_ACTIONS.includes(action.type)) fail('Em "projeto criado" só dá para notificar ou enviar e-mail');
+  if (SPRINT_TRIGGERS.includes(trigger) && ['set_due_in_days', 'move_to_active_sprint'].includes(action.type)) fail('Essa ação não combina com gatilhos de sprint');
   return { trigger, action };
 }
 
 export const insightMethods = {
-  // ---- configurações ----
+  // ---- configurações gerais ----
 
-  settings() {
+  settings({ reveal = false } = {}) {
     const rows = this.db.prepare('SELECT key, value FROM settings').all();
-    return { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value)])) };
+    const s = { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value)])) };
+    for (const k of SECRET_SETTINGS) s[k] = reveal ? this.reveal(s[k]) || '' : (s[k] ? '••••••••' : '');
+    return s;
   },
 
   setting(key) {
-    return this.settings()[key];
+    return SECRET_SETTINGS.includes(key) ? this.settings({ reveal: true })[key] : this.settings()[key];
   },
 
+  // Segredo vazio ou mascarado ("••••") mantém o valor atual.
   updateSettings(patch) {
     this.transaction(() => {
-      for (const [key, value] of Object.entries(patch)) {
+      for (const [key, raw] of Object.entries(patch)) {
         if (!(key in DEFAULT_SETTINGS) && !key.startsWith('chat_session:')) continue;
+        let value = raw;
+        if (key === 'due_soon_days' || key === 'smtp_port') value = Math.max(0, Math.round(Number(raw) || 0));
+        if (key === 'ai_provider') value = cleanEnum(raw, 'ai_provider', ['claude-cli', 'anthropic', 'openai']) || 'claude-cli';
+        if (key === 'default_language') value = cleanEnum(raw, 'default_language', ['pt', 'en', 'es', 'fr', 'de']) || 'pt';
+        if (SECRET_SETTINGS.includes(key)) {
+          if (raw === undefined || String(raw).startsWith('••')) continue;
+          value = raw ? this.secret(String(raw)) : '';
+        }
         this.db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
           .run(key, JSON.stringify(value));
       }
@@ -56,13 +97,17 @@ export const insightMethods = {
     return this.settings();
   },
 
+  publicUrl() {
+    return (this.settings().base_url || '').replace(/\/+$/, '') || `http://localhost:${process.env.CLAUDE_TASKS_PORT || 4317}`;
+  },
+
   // ---- dashboard ----
 
-  stats({ project_id } = {}) {
+  stats({ project_id, project_ids } = {}) {
     const d = today();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-    const scope = project_id ? 'AND t.project_id = ?' : '';
-    const args = project_id ? [project_id] : [];
+    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+    const { sql: scope, args } = scopeSql('t.project_id', project_id, project_ids);
 
     const totals = this.db.prepare(`
       SELECT COUNT(CASE WHEN status != 'done' THEN 1 END) AS open,
@@ -73,6 +118,8 @@ export const insightMethods = {
              COUNT(CASE WHEN status = 'done' AND completed_at >= ? THEN 1 END) AS done_7d,
              COUNT(CASE WHEN created_at >= ? THEN 1 END) AS created_7d,
              COUNT(CASE WHEN created_at >= ? AND source = 'claude' THEN 1 END) AS claude_7d,
+             COUNT(CASE WHEN type = 'bug' AND status != 'done' THEN 1 END) AS open_bugs,
+             COALESCE(SUM(CASE WHEN status != 'done' THEN story_points END), 0) AS open_points,
              COUNT(*) AS total
       FROM tasks t WHERE archived_at IS NULL ${scope}`).get(d, d, addDays(d, 7), weekAgo, weekAgo, weekAgo, ...args);
 
@@ -80,56 +127,114 @@ export const insightMethods = {
       SELECT COALESCE(SUM(COALESCE(e.minutes, (unixepoch('now') - unixepoch(e.started_at)) / 60)), 0) AS m
       FROM time_entries e JOIN tasks t ON t.id = e.task_id WHERE e.started_at >= ? ${scope}`).get(weekAgo, ...args).m;
 
-    // Criadas x concluídas nas últimas 8 semanas (semana começando na segunda).
+    // Criadas x concluídas (e bugs criados x resolvidos) nas últimas 8 semanas.
     const firstWeek = addDays(mondayOf(d), -7 * 7);
-    const weeks = Array.from({ length: 8 }, (_, i) => ({ week: addDays(firstWeek, i * 7), created: 0, done: 0 }));
+    const weeks = Array.from({ length: 8 }, (_, i) => ({ week: addDays(firstWeek, i * 7), created: 0, done: 0, bugs_created: 0, bugs_done: 0 }));
     const index = new Map(weeks.map((w, i) => [w.week, i]));
     const since = new Date(`${firstWeek}T00:00:00`).toISOString();
     for (const r of this.db.prepare(`
-      SELECT created_at, completed_at FROM tasks t WHERE archived_at IS NULL AND (created_at >= ? OR completed_at >= ?) ${scope}`)
+      SELECT created_at, completed_at, type FROM tasks t WHERE archived_at IS NULL AND (created_at >= ? OR completed_at >= ?) ${scope}`)
       .all(since, since, ...args)) {
       const c = index.get(mondayOf(localDate(new Date(r.created_at))));
-      if (c !== undefined) weeks[c].created++;
+      if (c !== undefined) { weeks[c].created++; if (r.type === 'bug') weeks[c].bugs_created++; }
       if (r.completed_at) {
         const k = index.get(mondayOf(localDate(new Date(r.completed_at))));
-        if (k !== undefined) weeks[k].done++;
+        if (k !== undefined) { weeks[k].done++; if (r.type === 'bug') weeks[k].bugs_done++; }
       }
     }
 
     const byPriority = Object.fromEntries(PRIORITIES.map((p) => [p, 0]));
-    for (const r of this.db.prepare(`
-      SELECT priority, COUNT(*) AS n FROM tasks t WHERE status != 'done' AND archived_at IS NULL ${scope} GROUP BY priority`).all(...args)) {
+    for (const r of this.db.prepare(`SELECT priority, COUNT(*) AS n FROM tasks t WHERE status != 'done' AND archived_at IS NULL ${scope} GROUP BY priority`).all(...args)) {
       byPriority[r.priority] = r.n;
     }
+    const byType = Object.fromEntries(TYPES.map((x) => [x, 0]));
+    for (const r of this.db.prepare(`SELECT type, COUNT(*) AS n FROM tasks t WHERE status != 'done' AND archived_at IS NULL ${scope} GROUP BY type`).all(...args)) {
+      byType[r.type] = r.n;
+    }
 
-    const byProject = project_id ? [] : this.listProjects({ include_archived: false })
-      .filter((p) => p.open + p.done > 0)
+    const projects = this.listProjects({ include_archived: false, project_ids: project_id ? [project_id] : project_ids });
+    const byProject = project_id ? [] : projects.filter((p) => p.open + p.done > 0)
       .map((p) => ({ id: p.id, name: p.name, color: p.color, todo: p.todo, doing: p.doing, blocked: p.blocked, open: p.open, overdue: p.overdue }));
+
+    // Portfólio: status e progresso de cada projeto.
+    const portfolio = projects.map((p) => ({
+      id: p.id, name: p.name, color: p.color, status: p.status, priority: p.priority, end_date: p.end_date,
+      progress: p.open + p.done ? p.done / (p.open + p.done) : 0, open: p.open, done: p.done, overdue: p.overdue,
+    }));
+
+    // Carga por pessoa (abertas por status) e tempo registrado em 30 dias.
+    const workload = this.db.prepare(`
+      SELECT u.id, u.name, u.color,
+        COUNT(CASE WHEN t.status = 'todo' THEN 1 END) AS todo,
+        COUNT(CASE WHEN t.status = 'doing' THEN 1 END) AS doing,
+        COUNT(CASE WHEN t.status = 'blocked' THEN 1 END) AS blocked,
+        COUNT(*) AS open,
+        COUNT(CASE WHEN t.status != 'done' AND t.due_date < ? THEN 1 END) AS overdue,
+        COALESCE(SUM(CASE WHEN t.status != 'done' THEN t.story_points END), 0) AS points
+      FROM users u JOIN assignees a ON a.user_id = u.id JOIN tasks t ON t.id = a.task_id
+      WHERE t.archived_at IS NULL AND t.status != 'done' ${scope} GROUP BY u.id ORDER BY COUNT(*) DESC`).all(d, ...args);
+    const utilization = this.db.prepare(`
+      SELECT u.id AS user_id, COALESCE(u.name, CASE e.author WHEN 'claude' THEN 'Claude' ELSE e.author END) AS name,
+        SUM(COALESCE(e.minutes, (unixepoch('now') - unixepoch(e.started_at)) / 60)) AS minutes
+      FROM time_entries e JOIN tasks t ON t.id = e.task_id LEFT JOIN users u ON u.id = e.user_id
+      WHERE e.started_at >= ? ${scope} GROUP BY 2 ORDER BY minutes DESC LIMIT 12`).all(monthAgo, ...args);
+    // Alocação: pessoa × projeto (tarefas abertas).
+    const allocation = this.db.prepare(`
+      SELECT u.name AS person, p.name AS project, p.id AS project_id, COUNT(*) AS n
+      FROM assignees a JOIN users u ON u.id = a.user_id JOIN tasks t ON t.id = a.task_id JOIN projects p ON p.id = t.project_id
+      WHERE t.status != 'done' AND t.archived_at IS NULL ${scope} GROUP BY u.id, p.id ORDER BY u.name, n DESC`).all(...args);
 
     const timeByProject = this.db.prepare(`
       SELECT p.id, p.name, p.color, SUM(COALESCE(e.minutes, (unixepoch('now') - unixepoch(e.started_at)) / 60)) AS minutes
       FROM time_entries e JOIN tasks t ON t.id = e.task_id JOIN projects p ON p.id = t.project_id
       WHERE e.started_at >= ? ${scope} GROUP BY p.id ORDER BY minutes DESC LIMIT 8`).all(weekAgo, ...args);
 
-    const upcoming = this.listTasks({ project_id, status: 'open', due: 'any', limit: 500 })
+    const upcoming = this.listTasks({ project_id, project_ids, status: 'open', due: 'any', limit: 500 })
       .sort((a, b) => a.due_date.localeCompare(b.due_date) || a.sort_rank - b.sort_rank)
       .slice(0, 10);
 
-    const sprint = project_id
-      ? this.db.prepare(`
-          SELECT s.*, (SELECT COUNT(*) FROM tasks t WHERE t.sprint_id = s.id AND t.archived_at IS NULL) AS total,
-                 (SELECT COUNT(*) FROM tasks t WHERE t.sprint_id = s.id AND t.archived_at IS NULL AND t.status = 'done') AS done
-          FROM sprints s WHERE s.project_id = ? AND s.status = 'active'`).get(project_id) || null
-      : null;
+    let sprint = null;
+    let velocity = [];
+    if (project_id) {
+      sprint = this.sprints(project_id).find((s) => s.status === 'active') || null;
+      if (sprint) sprint.burndown = this._burndown(sprint);
+      velocity = this.sprints(project_id).filter((s) => s.status === 'completed').slice(-6)
+        .map((s) => ({ id: s.id, name: s.name, points: s.points_done, tasks: s.done, planned_points: s.committed_points ?? s.points_total, planned: s.committed_tasks ?? s.total }));
+    }
 
-    return { totals, weeks, byPriority, byProject, timeByProject, upcoming, sprint, activity: this.activity({ project_id, limit: 20 }) };
+    return {
+      totals, weeks, byPriority, byType, byProject, portfolio, workload, utilization, allocation, timeByProject, upcoming,
+      sprint, velocity, activity: this.activity({ project_id, project_ids, limit: 20 }),
+    };
+  },
+
+  // Burndown da sprint: pontos (ou tarefas, sem pontos) restantes por dia, com a linha ideal.
+  _burndown(sprint) {
+    const tasks = this.db.prepare('SELECT story_points, status, completed_at FROM tasks WHERE sprint_id = ? AND archived_at IS NULL').all(sprint.id);
+    const usePoints = tasks.some((t) => t.story_points);
+    const weight = (t) => (usePoints ? t.story_points || 0 : 1);
+    const total = tasks.reduce((n, t) => n + weight(t), 0);
+    const start = sprint.start_date || today();
+    const end = sprint.end_date && sprint.end_date >= start ? sprint.end_date : addDays(start, 13);
+    const days = [];
+    for (let day = start, i = 0; day <= end && i < 120; day = addDays(day, 1), i++) days.push(day);
+    const span = Math.max(1, days.length - 1);
+    return {
+      unit: usePoints ? 'pontos' : 'tarefas',
+      total,
+      days: days.map((day, i) => ({
+        day,
+        ideal: Math.round((total - (total * i) / span) * 10) / 10,
+        remaining: day > today() ? null : total - tasks.filter((t) => t.status === 'done' && t.completed_at && localDate(new Date(t.completed_at)) <= day).reduce((n, t) => n + weight(t), 0),
+      })),
+    };
   },
 
   // Tempo registrado num período (datas locais, inclusivas), agrupado por tarefa, projeto, dia ou pessoa.
-  timeReport({ project_id, from, to, group_by = 'task' } = {}) {
+  timeReport({ project_id, project_ids, from, to, group_by = 'task' } = {}) {
     const end = to || today();
     const start = from || addDays(end, -6);
-    const scope = project_id ? 'AND t.project_id = ?' : '';
+    const { sql: scope, args } = scopeSql('t.project_id', project_id, project_ids);
     const entries = this.db.prepare(`
       SELECT e.id, e.task_id, e.author, e.note, e.started_at, e.ended_at, t.title, t.project_id, p.name AS project_name,
              u.name AS user_name, date(e.started_at, 'localtime') AS day,
@@ -137,7 +242,7 @@ export const insightMethods = {
       FROM time_entries e JOIN tasks t ON t.id = e.task_id JOIN projects p ON p.id = t.project_id
       LEFT JOIN users u ON u.id = e.user_id
       WHERE date(e.started_at, 'localtime') BETWEEN ? AND ? ${scope}
-      ORDER BY e.started_at`).all(start, end, ...(project_id ? [project_id] : []));
+      ORDER BY e.started_at`).all(start, end, ...args);
     const keyOf = {
       task: (e) => [`#${e.task_id}`, `#${e.task_id} ${e.title} (${e.project_name})`],
       project: (e) => [String(e.project_id), e.project_name],
@@ -162,20 +267,31 @@ export const insightMethods = {
     };
   },
 
-  activity({ project_id, limit = 30 } = {}) {
-    const scope = project_id ? 'AND t.project_id = ?' : '';
-    const args = project_id ? [project_id, project_id] : [];
+  // Feed de atividade com filtros: projeto(s), pessoa, autor (claude/user/automação), tipo, período e paginação.
+  activity({ project_id, project_ids, user_id, author, kind, since, until, q, limit = 30, offset = 0 } = {}) {
+    const { sql: scope, args: scopeArgs } = scopeSql('t.project_id', project_id, project_ids);
+    const where = ['1 = 1'];
+    const args = [];
+    if (user_id) { where.push('user_id = ?'); args.push(user_id); }
+    if (author) { where.push('author = ?'); args.push(author); }
+    if (kind) { where.push('kind = ?'); args.push(cleanEnum(kind, 'kind', ['created', 'note', 'event'])); }
+    if (since) { where.push('created_at >= ?'); args.push(new Date(`${since}T00:00:00`).toISOString()); }
+    if (until) { where.push('created_at < ?'); args.push(new Date(`${addDays(until, 1)}T00:00:00`).toISOString()); }
+    if (q) { where.push('(title LIKE ? OR body LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
     return this.db.prepare(`
       SELECT * FROM (
-        SELECT 'created' AS kind, t.id AS task_id, t.title, p.name AS project_name, t.source AS author, u.name AS user_name,
-               NULL AS body, t.created_at
+        SELECT 'created' AS kind, t.id AS task_id, t.title, t.project_id, p.name AS project_name, t.source AS author,
+               t.created_by AS user_id, u.name AS user_name, NULL AS body, t.created_at,
+               CASE WHEN p.key IS NOT NULL AND t.number IS NOT NULL THEN p.key || '-' || t.number END AS ref
         FROM tasks t JOIN projects p ON p.id = t.project_id LEFT JOIN users u ON u.id = t.created_by
         WHERE t.archived_at IS NULL ${scope}
         UNION ALL
-        SELECT n.kind, t.id, t.title, p.name, n.author, u.name, n.body, n.created_at
+        SELECT n.kind, t.id, t.title, t.project_id, p.name, n.author, n.user_id, u.name, n.body, n.created_at,
+               CASE WHEN p.key IS NOT NULL AND t.number IS NOT NULL THEN p.key || '-' || t.number END
         FROM notes n JOIN tasks t ON t.id = n.task_id JOIN projects p ON p.id = t.project_id LEFT JOIN users u ON u.id = n.user_id
         WHERE 1 = 1 ${scope}
-      ) ORDER BY created_at DESC LIMIT ?`).all(...args, limit);
+      ) WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .all(...scopeArgs, ...scopeArgs, ...args, Math.min(Number(limit) || 30, 500), Math.max(0, Number(offset) || 0));
   },
 
   // ---- automações ----
@@ -193,7 +309,7 @@ export const insightMethods = {
   automationsFor(trigger, project_id) {
     return this.db.prepare(`
       SELECT * FROM automations WHERE enabled = 1 AND trigger = ? AND (project_id IS NULL OR project_id = ?)`)
-      .all(trigger, project_id).map(parseAutomation);
+      .all(trigger, project_id ?? null).map(parseAutomation);
   },
 
   createAutomation(input) {

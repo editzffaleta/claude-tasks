@@ -1,7 +1,7 @@
 // Prompts do MCP. No Claude Code viram comandos: /mcp__tarefas__<nome>.
 // Cada prompt já embute os dados do quadro que importam, para o Claude começar sem consultas extras.
 import { addDays, formatDuration, formatTask, today } from '../db.js';
-import { describeTask, overviewText, projectBoard, store } from './context.js';
+import { describeTask, overviewText, projectBoard, store, visible } from './context.js';
 
 // Projeto do argumento ou, sem argumento, o da pasta onde a sessão está.
 function projectArg(value) {
@@ -44,7 +44,7 @@ ${p ? projectBoard(p) : overviewText(null)}`;
     build({ projeto }) {
       const p = projectArg(projeto);
       const order = { urgent: 0, high: 1, medium: 2, low: 3 };
-      const candidates = store.listTasks({ project_id: p?.id, status: 'open', limit: 1000 })
+      const candidates = store.listTasks({ project_id: p?.id, project_ids: p ? undefined : visible(), status: 'open', limit: 1000 })
         .filter((t) => !t.open_blockers && t.status !== 'blocked' && !t.subtask_count)
         .sort((a, b) => (b.status === 'doing') - (a.status === 'doing') || order[a.priority] - order[b.priority]
           || (a.due_date || '9999').localeCompare(b.due_date || '9999'))
@@ -152,7 +152,7 @@ ${projectBoard(p)}`;
     arguments: [{ name: 'projeto', description: 'Nome do projeto. Padrão: o da pasta atual.', required: false }],
     build({ projeto }) {
       const p = projectArg(projeto);
-      const tasks = store.listTasks({ project_id: p?.id, status: 'open', limit: 300 });
+      const tasks = store.listTasks({ project_id: p?.id, project_ids: p ? undefined : visible(), status: 'open', limit: 300 });
       return `${scopeLine(p)}
 
 Faça a triagem das tarefas abertas abaixo:
@@ -179,7 +179,7 @@ ${tasks.map((t) => `- ${formatTask(t, { withProject: !p })}${t.description ? '' 
       const from = addDays(today(), -(days - 1));
       const time = store.timeReport({ project_id: p?.id, from, group_by: 'project' });
       const activity = store.activity({ project_id: p?.id, limit: 400 }).filter((a) => a.created_at.slice(0, 10) >= from);
-      const done = store.listTasks({ project_id: p?.id, status: 'done', done_since: new Date(`${from}T00:00:00`).toISOString(), limit: 300 })
+      const done = store.listTasks({ project_id: p?.id, project_ids: p ? undefined : visible(), status: 'done', done_since: new Date(`${from}T00:00:00`).toISOString(), limit: 300 })
         .filter((t) => t.completed_at?.slice(0, 10) >= from);
       return `Escreva um relatório em português do período ${from} a ${today()} (${p ? p.name : 'todos os projetos'}), com as seções: Resumo, Concluído, Em andamento, Atrasado/bloqueado, Tempo gasto, Riscos e Próximos passos. Seja objetivo e cite tarefas como #id.
 
@@ -202,8 +202,8 @@ ${overviewText(p)}`;
     arguments: [{ name: 'projeto', description: 'Nome do projeto (padrão: todos).', required: false }],
     build({ projeto }) {
       const p = projeto ? projectArg(projeto) : null;
-      const overdue = store.listTasks({ project_id: p?.id, due: 'overdue', limit: 200 });
-      const week = store.listTasks({ project_id: p?.id, status: 'open', due: 'week', limit: 200 });
+      const overdue = store.listTasks({ project_id: p?.id, project_ids: p ? undefined : visible(), due: 'overdue', limit: 200 });
+      const week = store.listTasks({ project_id: p?.id, project_ids: p ? undefined : visible(), status: 'open', due: 'week', limit: 200 });
       return `Hoje é ${today()}. Revise os prazos abaixo (${p ? p.name : 'todos os projetos'}):
 - Para cada atrasada, proponha: nova data realista, subir prioridade, quebrar em partes ou arquivar.
 - Aponte conflitos (muitas tarefas no mesmo dia, dependências que terminam depois do prazo de quem depende delas).
@@ -234,8 +234,8 @@ export function getPrompt(name, args) {
 export function complete({ ref, argument }) {
   const value = String(argument?.value || '').toLowerCase();
   let values = [];
-  const projects = () => store.listProjects({ include_archived: false });
-  const openTasks = () => store.listTasks({ status: 'open', limit: 1000 })
+  const projects = () => store.listProjects({ include_archived: false, project_ids: visible() });
+  const openTasks = () => store.listTasks({ status: 'open', project_ids: visible(), limit: 1000 })
     .filter((t) => !value || String(t.id).startsWith(value.replace('#', '')) || t.title.toLowerCase().includes(value));
 
   if (ref?.type === 'ref/prompt') {

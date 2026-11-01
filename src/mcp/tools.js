@@ -3,13 +3,15 @@
 import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
-  ACTIONS, FREQS, PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, TRIGGERS, TYPES,
-  cleanDate, cleanId, formatDuration, formatTask, today,
+  ACTIONS, DEPENDENCY_TYPES, FREQS, PRIORITIES, PRIORITY_LABEL, PROJECT_STATUSES, STATUSES, STATUS_LABEL, TRIGGERS, TYPES,
+  VISIBILITIES, cleanDate, cleanId, formatDuration, formatTask, today,
 } from '../db.js';
 import { DEFAULT_SETTINGS } from '../store/insights.js';
 import {
-  CLAUDE, boardLink, describeTask, me, overviewText, projectFrom, requireProject, store, taskJson, taskLink, timeActor, userIds,
+  CLAUDE, actingUser, boardLink, describeTask, guardAdmin, guardProject, guardTask, me, overviewText, projectFrom, requireProject,
+  store, taskJson, taskLink, timeActor, userIds, visible,
 } from './context.js';
+import { EXTRA_TOOLS } from './tools-extra.js';
 
 // ---------- esquemas reutilizados ----------
 
@@ -34,7 +36,10 @@ const recurrence = {
   properties: {
     freq: { type: 'string', enum: FREQS },
     interval: { type: 'integer', minimum: 1, description: 'Every N units. Default 1.' },
+    weekdays: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 }, description: 'weekly: days of the week (0 = Sunday).' },
+    monthday: { type: ['integer', 'string'], description: 'monthly/quarterly: day of the month 1-31 or "last".' },
     until: { type: 'string', description: 'Last date (YYYY-MM-DD), optional.' },
+    count: { type: 'integer', minimum: 1, description: 'End after this many occurrences, optional.' },
   },
   required: ['freq'],
 };
@@ -49,11 +54,20 @@ const taskFields = {
   tags: { type: 'array', items: { type: 'string' }, description: 'e.g. bug, ui, backend, refactor. Replaces the list.' },
   start_date: date('When work should start.'),
   due_date: date('Deadline.'),
-  estimate: { type: ['string', 'null'], description: 'Effort estimate like "30m", "2h", "1h30m", "1d" (= 8h).' },
+  estimate: { type: ['string', 'null'], description: 'Original effort estimate like "30m", "2h", "1h30m", "1d" (= 8h).' },
   parent_id: { type: ['integer', 'null'], description: 'Make this a subtask of another task (same project). null detaches.' },
-  blocked_by: { type: 'array', items: { type: 'integer' }, description: 'Ids of tasks that must be done first. Replaces the list (cycles are rejected).' },
+  blocked_by: {
+    type: 'array',
+    description: 'Tasks that must come first. Replaces the list (cycles are rejected). Items: a task id, or { id, type } with type finish_start (default), start_start, finish_finish or start_finish.',
+    items: { anyOf: [{ type: 'integer' }, { type: 'object', properties: { id: { type: 'integer' }, type: { type: 'string', enum: DEPENDENCY_TYPES } }, required: ['id'] }] },
+  },
   sprint: { type: ['string', 'null'], description: 'Sprint name/id, "active" for the active sprint, or null for the backlog.' },
   assignees: { type: 'array', items: { type: 'string' }, description: 'Team members (name, e-mail or "me"). Replaces the list. See list_members.' },
+  watchers: { type: 'array', items: { type: 'string' }, description: 'Members who follow the task and get notified (name, e-mail or "me"). Replaces the list.' },
+  reporter: { type: ['string', 'null'], description: 'Who reported/requested the task (name, e-mail or "me").' },
+  story_points: { type: ['number', 'null'], description: 'Story points (agile size estimate).' },
+  remaining: { type: ['string', 'null'], description: 'Remaining effort, like "3h" (the original estimate stays in estimate).' },
+  fields: { type: 'object', description: 'Custom field values by field name or id, e.g. {"Cliente": "ACME", "Valor": 1200}. null clears a value. See manage_fields.' },
   recurrence,
 };
 
@@ -76,10 +90,9 @@ const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, openWorldHint:
 
 const json = (data) => JSON.stringify(data, null, 2);
 
-function requireTask(id) {
-  const t = store.task(cleanId(id));
-  if (!t) throw new Error(`Tarefa #${id} não encontrada`);
-  return t;
+// Aceita 12, "#12" ou o código do projeto ("WEB-12"); no chat do painel confere a permissão.
+function requireTask(id, level = 'read') {
+  return guardTask(id, level);
 }
 
 // Converte os argumentos de edição no patch aceito por store.updateTask.
@@ -87,17 +100,23 @@ function buildPatch(args, current) {
   const {
     id: _id, ids: _ids, note: _note, position: _pos, project_path, project, add_tags, remove_tags, add_blocked_by, remove_blocked_by, ...patch
   } = args;
-  const target = projectFrom({ project_path, project });
+  const target = projectFrom({ project_path, project }, { level: 'edit' });
   if (target) patch.project_id = target.id;
   if (add_tags || remove_tags) {
     const base = patch.tags ?? current.tags;
     patch.tags = [...new Set([...base, ...(add_tags || [])])].filter((t) => !(remove_tags || []).includes(t));
   }
   if (add_blocked_by || remove_blocked_by) {
-    const base = patch.blocked_by ?? store.blockers(current.id).map((b) => b.id);
-    patch.blocked_by = [...new Set([...base, ...(add_blocked_by || [])])].filter((b) => !(remove_blocked_by || []).includes(b));
+    // Mantém o tipo (SS, FF…) das dependências que já existem.
+    const base = (patch.blocked_by ?? store.blockers(current.id)).map((b) => (typeof b === 'object' ? { id: b.id, type: b.type } : { id: b }));
+    const removed = new Set((remove_blocked_by || []).map(Number));
+    const merged = new Map(base.map((b) => [Number(b.id), b]));
+    for (const id of add_blocked_by || []) if (!merged.has(Number(id))) merged.set(Number(id), { id: Number(id) });
+    patch.blocked_by = [...merged.values()].filter((b) => !removed.has(Number(b.id)));
   }
   if (patch.assignees) patch.assignees = userIds(patch.assignees);
+  if (patch.watchers) patch.watchers = userIds(patch.watchers);
+  if (patch.reporter === 'me' || patch.reporter === 'eu') patch.reporter = userIds(['me'])[0];
   return patch;
 }
 
@@ -112,7 +131,7 @@ function reposition(id, position) {
 }
 
 function applyEdit(id, args) {
-  const current = requireTask(id);
+  const current = requireTask(id, 'edit');
   store.updateTask(current.id, buildPatch(args, current), CLAUDE);
   if (args.position) reposition(current.id, args.position);
   if (args.note) store.addNote(current.id, args.note, CLAUDE);
@@ -136,6 +155,13 @@ function describeAutomation(r) {
   const { type, value } = r.action;
   const shown = type === 'set_priority' ? PRIORITY_LABEL[value] : type === 'set_status' ? STATUS_LABEL[value] : value;
   return `#${r.id} [${r.enabled ? 'ativa' : 'pausada'}] ${r.name} — quando ${TRIGGERS[r.trigger].toLowerCase()}${cond ? ` (${cond})` : ''} → ${ACTIONS[type].toLowerCase()}${shown != null ? ` "${shown}"` : ''} · ${r.project_name || 'todos os projetos'} · executada ${r.run_count}x`;
+}
+
+function resolveWorkspace(ref) {
+  const s = String(ref).trim().toLowerCase();
+  const w = store.workspaces().find((x) => String(x.id) === s || x.name.toLowerCase() === s);
+  if (!w) throw new Error(`Workspace "${ref}" não encontrado`);
+  return w;
 }
 
 function resolveColumnRef(project_id, ref) {
@@ -166,7 +192,12 @@ export const TOOLS = {
       return store.transaction(() => {
         const project = requireProject(args);
         const lines = args.tasks.map((item) => {
-          const input = { ...item, assignees: item.assignees ? userIds(item.assignees) : undefined };
+          const input = {
+            ...item,
+            assignees: item.assignees ? userIds(item.assignees) : undefined,
+            watchers: item.watchers ? userIds(item.watchers) : undefined,
+            reporter: item.reporter ? userIds([item.reporter])[0] : (me()?.id ?? undefined),
+          };
           const { task, duplicate } = store.addTask(project.id, input, CLAUDE);
           return `${duplicate ? 'já existia' : 'criada'}: ${formatTask(task)}`;
         });
@@ -188,6 +219,9 @@ export const TOOLS = {
         due: { type: 'string', enum: ['overdue', 'today', 'week', 'any', 'none'], description: 'Filter by deadline. week = next 7 days.' },
         sprint: { type: 'string', description: 'Sprint name/id, "active" or "backlog". Needs a project.' },
         assignee: { type: 'string', description: 'Team member name/e-mail, or "me".' },
+        reporter: { type: 'string', description: 'Reporter name/e-mail, or "me".' },
+        watcher: { type: 'string', description: 'Tasks watched by this member, or "me".' },
+        tag: { type: 'string', description: 'Only tasks with this tag/label.' },
         type: { type: 'string', enum: TYPES },
         column: { type: 'string', description: 'Only tasks in this board column (needs a project).' },
         parent_id: { type: 'integer', description: 'Only subtasks of this task.' },
@@ -208,9 +242,11 @@ export const TOOLS = {
       }
       const assignee_id = args.assignee ? userIds([args.assignee])[0] : undefined;
       let tasks = store.listTasks({
-        project_id: project?.id, status: args.status || 'open', q: args.query, due: args.due, sprint_id, assignee_id,
-        type: args.type, parent_id: args.parent_id, top_level: args.include_subtasks === false,
-        include_archived: !!args.include_archived, limit: 2000,
+        project_id: project?.id, project_ids: project ? undefined : visible(), status: args.status || 'open', q: args.query,
+        due: args.due, sprint_id, assignee_id, type: args.type, parent_id: args.parent_id, top_level: args.include_subtasks === false,
+        reporter_id: args.reporter ? userIds([args.reporter])[0] : undefined,
+        watcher_id: args.watcher ? userIds([args.watcher])[0] : undefined,
+        tag: args.tag, include_archived: !!args.include_archived, limit: 2000,
       });
       if (args.column) {
         if (!project) throw new Error('Filtrar por coluna exige informar o projeto');
@@ -240,10 +276,9 @@ export const TOOLS = {
     title: 'Ver tarefa',
     description: 'Get one task with full description, subtasks, dependencies, time entries, attachments and history.',
     annotations: READ,
-    inputSchema: { type: 'object', properties: { id: { type: 'integer' }, format }, required: ['id'] },
+    inputSchema: { type: 'object', properties: { id: { type: ['integer', 'string'], description: 'Task id, or project code like "WEB-12".' }, format }, required: ['id'] },
     run({ id, format: fmt }) {
-      const t = store.taskWithNotes(cleanId(id));
-      if (!t) throw new Error(`Tarefa #${id} não encontrada`);
+      const t = store.taskWithNotes(requireTask(id).id);
       if (fmt === 'json') {
         return json({
           ...taskJson(t),
@@ -320,7 +355,7 @@ export const TOOLS = {
     },
     run(args) {
       return store.transaction(() => args.ids.map((raw) => {
-        const id = requireTask(raw).id;
+        const id = requireTask(raw, 'edit').id;
         store.stopTaskTimers(id, timeActor());
         if (args.time_spent) store.logTime(id, { duration: args.time_spent, note: args.note }, timeActor());
         const t = store.updateTask(id, { status: 'done' }, CLAUDE);
@@ -342,7 +377,7 @@ export const TOOLS = {
     },
     run(args) {
       if (args.confirm !== true) throw new Error('Exclusão não confirmada: envie confirm: true (só quando o usuário pediu para excluir)');
-      const titles = args.ids.map((id) => { const t = requireTask(id); return `#${t.id} ${t.title}`; });
+      const titles = args.ids.map((id) => { const t = requireTask(id, 'manage'); return `#${t.id} ${t.title}`; });
       // Excluir a tarefa-mãe já leva as subtarefas; ignora ids que sumiram assim.
       args.ids.forEach((id) => { if (store.task(cleanId(id))) store.deleteTask(cleanId(id)); });
       return `Excluídas: ${titles.join('; ')}`;
@@ -353,10 +388,18 @@ export const TOOLS = {
     title: 'Comentar',
     description: 'Add a comment to a task history (progress, decisions, findings). Markdown allowed.',
     annotations: WRITE,
-    inputSchema: { type: 'object', properties: { id: { type: 'integer' }, body: { type: 'string' } }, required: ['id', 'body'] },
-    run({ id, body }) {
-      const t = requireTask(id);
-      store.addNote(t.id, body, CLAUDE);
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: ['integer', 'string'] },
+        body: { type: 'string', description: 'Markdown. Mention people with @Name to notify them.' },
+        reply_to: { type: 'integer', description: 'Comment id to reply to (threads). See get_task.' },
+      },
+      required: ['id', 'body'],
+    },
+    run({ id, body, reply_to }) {
+      const t = requireTask(id, 'edit');
+      store.addNote(t.id, body, CLAUDE, { parent_id: reply_to });
       return `Comentário adicionado em #${t.id} ${t.title}.`;
     },
   },
@@ -369,7 +412,7 @@ export const TOOLS = {
     annotations: READ,
     inputSchema: { type: 'object', properties: { include_archived: { type: 'boolean', description: 'Default true.' }, format } },
     run(args) {
-      const projects = store.listProjects({ include_archived: args.include_archived !== false });
+      const projects = store.listProjects({ include_archived: args.include_archived !== false, project_ids: visible() });
       if (args.format === 'json') {
         return json(projects.map((p) => ({ ...p, columns: store.columns(p.id).map((c) => ({ id: c.id, name: c.name, status: c.status })), url: boardLink(p) })));
       }
@@ -394,26 +437,43 @@ export const TOOLS = {
         name: { type: 'string', description: 'Name for create, or new name for update.' },
         description: { type: 'string' },
         color: { type: 'string', description: 'Hex color, e.g. #2a78d6.' },
+        key: { type: ['string', 'null'], description: 'Task code prefix, e.g. "WEB" makes tasks WEB-1, WEB-2…' },
+        status: { type: 'string', enum: PROJECT_STATUSES },
+        priority: { type: 'string', enum: PRIORITIES },
+        visibility: { type: 'string', enum: VISIBILITIES, description: 'private: only members; internal (default): every account; public: also allows public share links.' },
+        start_date: date('Project start.'),
+        end_date: date('Project end.'),
+        workspace: { type: 'string', description: 'Workspace name or id to place/move the project in.' },
         confirm: { type: 'boolean', description: 'Required (true) for delete.' },
       },
       required: ['action'],
     },
     run(args) {
+      const workspace_id = args.workspace ? resolveWorkspace(args.workspace).id : undefined;
+      const fields = {
+        description: args.description, color: args.color, key: args.key, status: args.status, priority: args.priority,
+        visibility: args.visibility, start_date: args.start_date, end_date: args.end_date, workspace_id,
+      };
       if (args.action === 'create') {
-        const p = store.createProject(args.name, null, args);
-        return `Projeto criado: [${p.id}] ${p.name} · ${boardLink(p)}`;
+        if (actingUser()?.role === 'viewer') throw new Error('Visualizadores não criam projetos');
+        const p = store.createProject(args.name, null, { ...fields, actor: CLAUDE });
+        return `Projeto criado: [${p.id}] ${p.name}${p.key ? ` (${p.key})` : ''} · ${boardLink(p)}`;
       }
-      const p = projectFrom(args, { create: false }) || requireProject(args, { create: false });
+      const p = projectFrom(args, { create: false }) || requireProject(args, { create: false, level: 'manage' });
       if (args.action === 'update') {
-        const u = store.updateProject(p.id, { name: args.name, description: args.description, color: args.color });
-        return `Projeto atualizado: [${u.id}] ${u.name}`;
+        // Mudar a visibilidade é coisa de dono, como na API.
+        guardProject(p, args.visibility && args.visibility !== p.visibility ? 'own' : 'manage');
+        const u = store.updateProject(p.id, { name: args.name, ...fields });
+        return `Projeto atualizado: [${u.id}] ${u.name}${u.key ? ` (${u.key})` : ''} · ${u.status} · ${u.visibility}`;
       }
       if (args.action === 'archive' || args.action === 'unarchive') {
+        guardProject(p, 'own');
         store.updateProject(p.id, { archived: args.action === 'archive' });
         return `Projeto ${p.name} ${args.action === 'archive' ? 'arquivado' : 'desarquivado'}.`;
       }
       if (args.action === 'delete') {
         if (args.confirm !== true) throw new Error('Exclusão não confirmada: envie confirm: true (só quando o usuário pediu)');
+        guardProject(p, 'own');
         store.deleteProject(p.id);
         return `Projeto ${p.name} excluído com todas as tarefas.`;
       }
@@ -429,8 +489,15 @@ export const TOOLS = {
       type: 'object',
       properties: {
         ...projectProps,
-        action: { type: 'string', enum: ['list', 'create', 'update', 'move', 'delete'] },
+        action: { type: 'string', enum: ['list', 'create', 'update', 'move', 'delete', 'set_transitions', 'save_workflow', 'apply_workflow', 'list_workflows'] },
         column: { type: 'string', description: 'Column name or id (update/move/delete).' },
+        transitions: {
+          type: 'array',
+          items: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 2 },
+          description: 'set_transitions: allowed moves as [from, to] column names, e.g. [["A fazer","Em andamento"],["Em andamento","Revisão"]]. Empty list = any move allowed.',
+        },
+        workflow: { type: 'string', description: 'apply_workflow: workflow name or id. save_workflow: name for the new workflow.' },
+        default: { type: 'boolean', description: 'save_workflow: use it for new projects.' },
         name: { type: 'string', description: 'Name (create) or new name (update).' },
         status: { type: 'string', enum: STATUSES, description: 'Status category (create/update). Default doing.' },
         color: { type: 'string' },
@@ -439,10 +506,33 @@ export const TOOLS = {
       required: ['action'],
     },
     run(args) {
-      const project = requireProject(args, { create: false });
-      const list = () => store.columns(project.id).map((c, i) => `${i + 1}. ${c.name} [${STATUS_LABEL[c.status]}]${c.id ? ` (id ${c.id})` : ' (padrão)'}`).join('\n');
+      if (args.action === 'list_workflows') {
+        const wfs = store.workflows();
+        return wfs.length ? wfs.map((w) => `[${w.id}] ${w.name}${w.is_default ? ' (padrão)' : ''}: ${w.columns.map((c) => c.name).join(' → ')}${w.transitions.length ? ` · ${w.transitions.length} transições` : ''}`).join('\n') : 'Nenhum workflow salvo.';
+      }
+      const project = requireProject(args, { create: false, level: args.action === 'list' ? 'read' : 'manage' });
+      const list = () => {
+        const cols = store.columns(project.id);
+        const tr = store.transitions(project.id);
+        const names = new Map(cols.map((c) => [c.id, c.name]));
+        return cols.map((c, i) => `${i + 1}. ${c.name} [${STATUS_LABEL[c.status]}]${c.id ? ` (id ${c.id})` : ' (padrão)'}`).join('\n')
+          + (tr.length ? `\nTransições permitidas: ${tr.map((t) => `${names.get(t.from_column_id)} → ${names.get(t.to_column_id)}`).join('; ')}` : '\nTransições: livres');
+      };
       switch (args.action) {
         case 'list': return `Colunas de ${project.name}:\n${list()}`;
+        case 'set_transitions': store.setTransitions(project.id, args.transitions || []); break;
+        case 'save_workflow': {
+          guardAdmin();
+          const w = store.workflowFromProject(project.id, { name: args.workflow, is_default: !!args.default });
+          return `Workflow salvo: [${w.id}] ${w.name}${w.is_default ? ' (padrão para projetos novos)' : ''}`;
+        }
+        case 'apply_workflow': {
+          const ref = String(args.workflow || '').toLowerCase();
+          const w = store.workflows().find((x) => String(x.id) === ref || x.name.toLowerCase() === ref);
+          if (!w) throw new Error(`Workflow "${args.workflow}" não encontrado (veja list_workflows)`);
+          store.applyWorkflow(project.id, w.id);
+          break;
+        }
         case 'create': store.createColumn(project.id, args); break;
         case 'update': store.updateColumn(resolveColumnRef(project.id, args.column).id, { name: args.name, status: args.status, color: args.color }); break;
         case 'move': store.updateColumn(resolveColumnRef(project.id, args.column).id, { move: args.direction || 'right' }); break;
@@ -461,7 +551,7 @@ export const TOOLS = {
       type: 'object',
       properties: {
         ...projectProps,
-        action: { type: 'string', enum: ['list', 'show', 'create', 'update', 'start', 'complete', 'delete'] },
+        action: { type: 'string', enum: ['list', 'show', 'create', 'update', 'start', 'complete', 'cancel', 'delete'] },
         id: { type: 'integer', description: 'Sprint id (show/update/start/complete/delete).' },
         name: { type: 'string' },
         goal: { type: 'string' },
@@ -472,9 +562,14 @@ export const TOOLS = {
       required: ['action'],
     },
     run(args) {
-      const project = requireProject(args);
-      const fmt = (s) => `#${s.id} ${s.name} [${{ planning: 'planejamento', active: 'ativa', completed: 'concluída' }[s.status]}]`
+      const project = requireProject(args, { level: ['list', 'show'].includes(args.action) ? 'read' : 'manage' });
+      const fmt = (s) => `#${s.id} ${s.name} [${{ planning: 'planejamento', active: 'ativa', completed: 'concluída', cancelled: 'cancelada' }[s.status]}]`
         + `${s.start_date || s.end_date ? ` ${s.start_date || '?'} → ${s.end_date || '?'}` : ''}${s.total !== undefined ? ` · ${s.done}/${s.total} concluídas` : ''}${s.goal ? ` — ${s.goal}` : ''}`;
+      // A sprint informada tem de ser do projeto cuja permissão foi conferida.
+      if (args.id != null && !['list', 'create'].includes(args.action)) {
+        const s = store.sprint(cleanId(args.id));
+        if (!s || s.project_id !== project.id) throw new Error('Sprint não encontrada neste projeto');
+      }
       switch (args.action) {
         case 'list': {
           const list = store.sprints(project.id);
@@ -488,10 +583,14 @@ export const TOOLS = {
         }
         case 'create': return `Criada: ${fmt(store.createSprint(project.id, args))}`;
         case 'update': return `Atualizada: ${fmt(store.updateSprint(cleanId(args.id), args))}`;
-        case 'start': return `Iniciada: ${fmt(store.startSprint(cleanId(args.id)))}`;
+        case 'start': return `Iniciada: ${fmt(store.startSprint(cleanId(args.id), CLAUDE))}`;
         case 'complete': {
-          const r = store.completeSprint(cleanId(args.id), { move_to: args.move_to });
+          const r = store.completeSprint(cleanId(args.id), { move_to: args.move_to }, CLAUDE);
           return `Concluída: ${fmt(r.sprint)}. ${r.moved} tarefa(s) pendente(s) movida(s) para ${r.moved_to ? r.moved_to.name : 'o backlog'}.`;
+        }
+        case 'cancel': {
+          const r = store.cancelSprint(cleanId(args.id), { move_to: args.move_to }, CLAUDE);
+          return `Cancelada: ${fmt(r.sprint)}. ${r.moved} tarefa(s) movida(s) para ${r.moved_to ? r.moved_to.name : 'o backlog'}.`;
         }
         case 'delete': store.deleteSprint(cleanId(args.id)); return 'Sprint excluída (as tarefas foram para o backlog).';
         default: throw new Error('Ação inválida');
@@ -513,12 +612,12 @@ export const TOOLS = {
     run(args) {
       const actor = timeActor();
       if (args.action === 'start') {
-        const t = requireTask(args.id);
+        const t = requireTask(args.id, 'edit');
         store.startTimer(t.id, actor);
         return `Timer iniciado em #${t.id} ${t.title}.`;
       }
       if (args.action === 'stop') {
-        const t = requireTask(args.id);
+        const t = requireTask(args.id, 'edit');
         store.stopTaskTimers(t.id, actor);
         return `Timer parado. #${t.id} soma ${formatDuration(store.task(t.id).spent_minutes)}.`;
       }
@@ -543,7 +642,7 @@ export const TOOLS = {
       required: ['id', 'duration'],
     },
     run(args) {
-      const t = requireTask(args.id);
+      const t = requireTask(args.id, 'edit');
       store.logTime(t.id, args, timeActor());
       const after = store.task(t.id);
       return `Tempo registrado em #${t.id}. Total: ${formatDuration(after.spent_minutes)}${after.estimate_minutes ? ` de ${formatDuration(after.estimate_minutes)} estimados` : ''}.`;
@@ -567,7 +666,7 @@ export const TOOLS = {
     run(args) {
       const project = projectFrom(args, { create: false });
       const r = store.timeReport({
-        project_id: project?.id, from: cleanDate(args.from, 'from') || undefined, to: cleanDate(args.to, 'to') || undefined, group_by: args.group_by || 'task',
+        project_id: project?.id, project_ids: project ? undefined : visible(), from: cleanDate(args.from, 'from') || undefined, to: cleanDate(args.to, 'to') || undefined, group_by: args.group_by || 'task',
       });
       if (args.format === 'json') return json({ ...r, project: project?.name ?? null });
       if (!r.entries.length) return `Nenhum tempo registrado de ${r.from} a ${r.to}${project ? ` em ${project.name}` : ''}.`;
@@ -594,7 +693,7 @@ export const TOOLS = {
       required: ['id', 'path'],
     },
     run(args) {
-      const a = store.attachFile(requireTask(args.id).id, args.path, CLAUDE, args.name);
+      const a = store.attachFile(requireTask(args.id, 'edit').id, args.path, CLAUDE, args.name);
       return `Anexado em #${args.id}: ${a.name} (id ${a.id}, ${Math.ceil(a.size / 1024)} KB).`;
     },
   },
@@ -607,6 +706,7 @@ export const TOOLS = {
     run({ id }) {
       const a = store.attachment(cleanId(id));
       if (!a) throw new Error(`Anexo ${id} não encontrado`);
+      requireTask(a.task_id);
       const path = store.attachmentPath(a);
       const meta = `Anexo ${a.id} da tarefa #${a.task_id}: ${a.name} (${a.mime}, ${Math.ceil(a.size / 1024)} KB)\nArquivo local: ${path}`;
       if (/^image\/(png|jpeg|gif|webp)$/.test(a.mime) && a.size <= 5 * 1024 * 1024) {
@@ -630,7 +730,7 @@ export const TOOLS = {
       const project = projectFrom(args, { create: false });
       if ((args.project || args.project_path) && !project) return 'Esse projeto ainda não está no quadro.';
       if (args.format === 'json') {
-        const s = store.stats({ project_id: project?.id });
+        const s = store.stats({ project_id: project?.id, project_ids: project ? undefined : visible() });
         return json({ project: project?.name ?? null, today: today(), ...s, upcoming: s.upcoming.map(taskJson) });
       }
       return overviewText(project);
@@ -652,7 +752,7 @@ export const TOOLS = {
     run(args) {
       const project = projectFrom(args, { create: false });
       const since = cleanDate(args.since, 'since');
-      let items = store.activity({ project_id: project?.id, limit: since ? 1000 : (args.limit || 30) });
+      let items = store.activity({ project_id: project?.id, project_ids: project ? undefined : visible(), limit: since ? 1000 : (args.limit || 30) });
       if (since) items = items.filter((a) => a.created_at.slice(0, 10) >= since).slice(0, args.limit || 30);
       if (!items.length) return 'Nenhuma atividade.';
       return items.map((a) => {
@@ -674,6 +774,7 @@ export const TOOLS = {
       const users = store.listUsers();
       const self = me();
       if (!users.length) return 'Ainda não há membros cadastrados no painel.';
+      if (actingUser()?.role === 'viewer') return users.map((u) => `${u.name}${self?.id === u.id ? ' ← "me"' : ''}`).join('\n');
       return users.map((u) => `${u.name} <${u.email}>${u.role === 'admin' ? ' (admin)' : ''}${self?.id === u.id ? ' ← "me"' : ''}`).join('\n');
     },
   },
@@ -693,7 +794,8 @@ export const TOOLS = {
     },
     run(args) {
       if (args.task_id) requireTask(args.task_id);
-      const n = store.notify({ user_ids: args.to?.length ? userIds(args.to) : null, task_id: args.task_id ?? null, body: `Claude: ${args.message}` });
+      if (actingUser()?.role === 'viewer') throw new Error('Visualizadores não enviam notificações');
+      const n = store.notify({ user_ids: args.to?.length ? userIds(args.to) : null, task_id: args.task_id ?? null, body: `Claude: ${args.message}`, type: 'claude' });
       return `Notificação enviada (${n} destinatário(s)).`;
     },
   },
@@ -747,32 +849,49 @@ export const TOOLS = {
             tag: { type: 'string' },
             by_claude: { type: 'boolean', description: 'Only tasks created by Claude.' },
             days: { type: 'integer', description: 'due_soon: how many days before the deadline. Default 1.' },
+            field: { type: 'string', description: 'task_updated: only when this task column changed, e.g. status, priority, due_date, tags, story_points, sprint_id, column_id, reporter_id (assignee changes use the "assigned" trigger).' },
           },
         },
         action_type: { type: 'string', enum: Object.keys(ACTIONS) },
         action_value: {
           type: ['string', 'number', 'null'],
-          description: 'set_status: status · set_priority: priority · add_tag/remove_tag: tag · add_comment/notify: text with {id} {titulo} {projeto} {prazo} {status} {prioridade} · set_due_in_days: number · assign: member name/e-mail · move_to_active_sprint: none.',
+          description: 'set_status: status · set_column: column name · set_priority: priority · add_tag/remove_tag: tag · add_comment/notify/send_email: text with {id} {ref} {titulo} {projeto} {prazo} {status} {prioridade} {sprint} · set_due_in_days: number · assign: member name/e-mail · move_to_sprint: sprint name/id, "active" or "next" · move_to_active_sprint: none.',
         },
+        email_to: { type: 'string', description: 'send_email: "followers" (default), "assignees" or comma-separated e-mails.' },
+        email_subject: { type: 'string', description: 'send_email: subject (same variables as the text).' },
         enabled: { type: 'boolean' },
       },
       required: ['action'],
     },
     run(args) {
+      // Regras globais: só administradores. Regras de um projeto: gerentes dele (como na API).
       const project = args.all_projects ? null : projectFrom(args, { create: false });
+      const ruleGuard = (rule) => (rule?.project_id ? guardProject(rule.project_id, 'manage') : guardAdmin());
+      if (args.action === 'create') ruleGuard({ project_id: project?.id });
+      if (!['list', 'create'].includes(args.action)) {
+        const rule = store.automation(cleanId(args.id));
+        if (!rule) throw new Error(`Automação #${args.id} não encontrada`);
+        ruleGuard(rule);
+        if (project || args.all_projects) ruleGuard({ project_id: project?.id });
+      }
       const body = () => {
         const b = {};
         if (args.name !== undefined) b.name = args.name;
         if (args.trigger) b.trigger = args.trigger;
         if (args.conditions) b.conditions = args.conditions;
-        if (args.action_type) b.action = { type: args.action_type, value: args.action_value ?? null };
+        if (args.action_type) {
+          b.action = { type: args.action_type, value: args.action_value ?? null };
+          if (args.email_to) b.action.to = args.email_to;
+          if (args.email_subject) b.action.subject = args.email_subject;
+        }
         if (args.enabled !== undefined) b.enabled = args.enabled;
         if (project || args.all_projects) b.project_id = project?.id ?? null;
         return b;
       };
       switch (args.action) {
         case 'list': {
-          const rules = store.listAutomations();
+          const ids = visible();
+          const rules = store.listAutomations().filter((r) => !r.project_id || !ids || ids.includes(r.project_id));
           return rules.length ? rules.map(describeAutomation).join('\n') : 'Nenhuma automação.';
         }
         case 'create': {
@@ -805,6 +924,7 @@ export const TOOLS = {
     },
     run(args) {
       if (args.action === 'update') {
+        guardAdmin();
         const patch = {};
         for (const k of Object.keys(DEFAULT_SETTINGS)) if (args[k] !== undefined) patch[k] = args[k];
         if (patch.due_soon_days !== undefined && !(Number.isInteger(patch.due_soon_days) && patch.due_soon_days >= 0 && patch.due_soon_days <= 30)) {
@@ -817,3 +937,5 @@ export const TOOLS = {
     },
   },
 };
+
+Object.assign(TOOLS, EXTRA_TOOLS);

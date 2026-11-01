@@ -7,7 +7,7 @@ import { PROMPTS, complete, getPrompt } from './mcp/prompts.js';
 import { RESOURCE_TEMPLATES, listResources, readResource } from './mcp/resources.js';
 import { TOOLS } from './mcp/tools.js';
 
-const SERVER_INFO = { name: 'tarefas', title: 'Quadro de tarefas', version: '3.0.0' };
+const SERVER_INFO = { name: 'tarefas', title: 'Quadro de tarefas', version: '4.0.0' };
 const SUPPORTED_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
 const INSTRUCTIONS = `Central task board shared across ALL of the user's projects (dashboard: ${BOARD_URL}). Keep it current:
@@ -29,11 +29,11 @@ const toolList = () => Object.entries(TOOLS).map(([name, t]) => ({
   annotations: { title: t.title, ...t.annotations },
 }));
 
-function callTool(name, args) {
+async function callTool(name, args) {
   const tool = TOOLS[name];
   if (!tool) throw Object.assign(new Error(`Ferramenta desconhecida: ${name}`), { code: -32602 });
   try {
-    const result = tool.run(args || {});
+    const result = await tool.run(args || {});
     return typeof result === 'string' ? { content: [{ type: 'text', text: result }] } : result;
   } catch (e) {
     return { content: [{ type: 'text', text: `Erro: ${e.message}` }], isError: true };
@@ -88,7 +88,7 @@ function handle(msg) {
   }
 }
 
-createInterface({ input: process.stdin }).on('line', (line) => {
+createInterface({ input: process.stdin }).on('line', async (line) => {
   if (!line.trim()) return;
   let msg;
   try {
@@ -97,7 +97,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     return send({ id: null, error: { code: -32700, message: 'JSON inválido' } });
   }
   try {
-    const result = handle(msg);
+    const result = await handle(msg);
     if (msg.id !== undefined && result !== undefined) send({ id: msg.id, result });
   } catch (e) {
     if (msg.id !== undefined) send({ id: msg.id, error: { code: e.code || -32603, message: e.message } });

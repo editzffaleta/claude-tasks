@@ -1,0 +1,19 @@
+# docker compose up -d  →  http://localhost:4317
+services:
+  tarefas:
+    build: .
+    image: claude-tasks
+    restart: unless-stopped
+    ports:
+      - "4317:4317"
+    environment:
+      # Endereços pelos quais o painel será aberto (host:porta), separados por vírgula.
+      # Atrás de um proxy reverso que já valida o domínio, use "*".
+      CLAUDE_TASKS_HOSTS: "localhost:4317,127.0.0.1:4317"
+      # Opcional: IA do chat por chave (a CLI do Claude Code não existe dentro do contêiner).
+      # Configure provedor, chave e modelo em Configurações → IA do chat.
+    volumes:
+      - tarefas-data:/data
+
+volumes:
+  tarefas-data:

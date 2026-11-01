@@ -1,0 +1,259 @@
+/* Dashboard: complementa o bloco "dashboard" de styles.css (tiles, cards, legenda, feed).
+   Cores dos gráficos: --series-1/--series-2 (identidade), rampa azul ordinal (prioridade) e
+   sequencial (alocação), validadas nos dois temas; status só com ícone + rótulo. */
+
+:root {
+  /* rampa ordinal: prioridade mínima → urgente (passos 250…650 do azul) */
+  --dash-ord-1: #86b6ef;
+  --dash-ord-2: #5598e7;
+  --dash-ord-3: #2a78d6;
+  --dash-ord-4: #1c5cab;
+  --dash-ord-5: #104281;
+  /* rampa sequencial: alocação (pouco → muito), com a tinta do número dentro da célula */
+  --dash-heat-1: #b7d3f6;
+  --dash-heat-2: #86b6ef;
+  --dash-heat-3: #5598e7;
+  --dash-heat-4: #2a78d6;
+  --dash-heat-5: #184f95;
+  --dash-heat-ink-1: #0b0b0b;
+  --dash-heat-ink-2: #0b0b0b;
+  --dash-heat-ink-3: #ffffff;
+  --dash-heat-ink-4: #ffffff;
+  --dash-heat-ink-5: #ffffff;
+}
+
+/* tema escuro: a rampa inverte a âncora (mais = mais claro) e não desce abaixo do passo 600 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --dash-ord-1: #184f95;
+    --dash-ord-2: #256abf;
+    --dash-ord-3: #3987e5;
+    --dash-ord-4: #6da7ec;
+    --dash-ord-5: #9ec5f4;
+    --dash-heat-1: #184f95;
+    --dash-heat-2: #256abf;
+    --dash-heat-3: #3987e5;
+    --dash-heat-4: #6da7ec;
+    --dash-heat-5: #9ec5f4;
+    --dash-heat-ink-1: #ffffff;
+    --dash-heat-ink-2: #ffffff;
+    --dash-heat-ink-3: #ffffff;
+    --dash-heat-ink-4: #0b0b0b;
+    --dash-heat-ink-5: #0b0b0b;
+  }
+}
+:root[data-theme="dark"] {
+  --dash-ord-1: #184f95;
+  --dash-ord-2: #256abf;
+  --dash-ord-3: #3987e5;
+  --dash-ord-4: #6da7ec;
+  --dash-ord-5: #9ec5f4;
+  --dash-heat-1: #184f95;
+  --dash-heat-2: #256abf;
+  --dash-heat-3: #3987e5;
+  --dash-heat-4: #6da7ec;
+  --dash-heat-5: #9ec5f4;
+  --dash-heat-ink-1: #ffffff;
+  --dash-heat-ink-2: #ffffff;
+  --dash-heat-ink-3: #ffffff;
+  --dash-heat-ink-4: #0b0b0b;
+  --dash-heat-ink-5: #0b0b0b;
+}
+
+/* ---------- estrutura ---------- */
+.dash { container: dash / inline-size; }
+.dash .tiles, .dash .dash-grid { transition: opacity 0.2s; }
+.dash.refreshing .tiles, .dash.refreshing .dash-grid { opacity: 0.6; }
+.dash .tiles { grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr)); }
+.dash .dash-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); grid-auto-flow: dense; }
+@container dash (max-width: 655px) {
+  .dash .span-2 { grid-column: auto; }
+}
+.dash .card-box { container: card / inline-size; display: flex; flex-direction: column; }
+.dash .card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; min-width: 0; }
+.dash .card-head h3 { margin: 0; flex: 1 1 auto; min-width: 0; }
+.dash .card-sub { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.dash .card-foot { margin-top: auto; padding-top: 8px; }
+.dash .link-btn { font-size: 12.5px; color: var(--accent); }
+.dash .link-btn:hover { text-decoration: underline; }
+.dash h4.sub { margin: 14px 0 8px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+
+/* ---------- tiles ---------- */
+.dash .stat-value { font-variant-numeric: normal; font-weight: 600; }
+.dash .stat-label { min-width: 0; }
+.dash .stat-label .type-icon svg { color: inherit; }
+.dash .stat-label .status-icon { width: 13px; height: 13px; }
+@container dash (max-width: 420px) {
+  .dash .stat-tile { padding: 10px 12px; }
+  .dash .stat-value { font-size: 22px; }
+}
+
+/* ---------- legenda ---------- */
+.dash .legend { flex-wrap: wrap; row-gap: 4px; margin: -4px 0 10px; }
+.dash .legend .key.line { width: 14px; height: 2px; border-radius: 1px; }
+.dash .legend .key.line.ideal { height: 0; background: none; border-top: 2px dashed var(--text-3); }
+.dash .flags-key { color: var(--text-3); gap: 4px; }
+.dash .flags-key svg { width: 13px; height: 13px; }
+.dash .flags-key .status-icon + * { margin-right: 8px; }
+.dash .od { display: inline-grid; place-items: center; color: var(--critical); }
+.dash .od svg { width: 13px; height: 13px; }
+
+/* ---------- colunas agrupadas ---------- */
+.dash .cols { position: relative; height: 188px; margin-left: 30px; }
+.dash .cols-grid { position: absolute; inset: 14px 0 24px 0; pointer-events: none; }
+.dash .cols-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); }
+.dash .cols-line.base { border-top-color: var(--border-strong); }
+.dash .cols-line span { position: absolute; right: calc(100% + 6px); top: -8px; font-size: 11px; line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dash .cols-body { position: absolute; inset: 0; display: flex; gap: 4px; }
+.dash .cols-group { flex: 1; min-width: 0; display: flex; flex-direction: column; border-radius: 6px; outline-offset: -2px; }
+.dash .cols-group:hover, .dash .cols-group:focus-visible { background: var(--hover); }
+.dash .cols-bars { flex: 1; min-height: 0; display: flex; align-items: flex-end; justify-content: center; gap: 2px; padding: 14px 10% 0; }
+.dash .cb { position: relative; flex: 1; max-width: 18px; border-radius: 4px 4px 0 0; }
+.dash .cb.s1 { background: var(--series-1); }
+.dash .cb.s2 { background: var(--series-2); }
+.dash .cb .cap { position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); font: 600 10.5px/1 var(--font); font-style: normal; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* par de rótulos: o da esquerda cresce para a esquerda e o da direita para a direita, sem colidir */
+.dash .cb:first-child:not(:last-child) .cap { left: auto; right: 0; transform: none; }
+.dash .cb:last-child:not(:first-child) .cap { left: 0; transform: none; }
+.dash .cols-label { height: 24px; line-height: 24px; font-size: 11px; color: var(--text-3); display: flex; justify-content: center; min-width: 0; }
+.dash .cols-label span { max-width: 100%; padding: 0 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* card estreito com muitos grupos: um rótulo sim, um não (contando do mais recente), e o visível pode transbordar */
+@container card (max-width: 420px) {
+  .dash .cols-body.many .cols-group:nth-last-child(even) .cols-label { visibility: hidden; }
+  .dash .cols-body.many .cols-label span { max-width: none; overflow: visible; }
+}
+@container card (max-width: 300px) {
+  .dash .cb .cap { display: none; }
+}
+
+/* ---------- barras horizontais ---------- */
+.dash .hb { display: grid; grid-template-columns: minmax(84px, 36%) minmax(0, 1fr) auto; row-gap: 4px; }
+.dash .hb-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  text-align: left;
+  min-width: 0;
+}
+.dash .hb-row:hover, .dash .hb-row:focus-visible { background: var(--hover); }
+.dash .hb-label { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-2); }
+.dash .hb-label .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash .hb-label .avatar { flex: none; }
+.dash .hb-area { position: relative; height: 16px; margin-right: var(--lab, 2.6em); min-width: 0; }
+.dash .hb-bar { position: absolute; left: 0; top: 2px; height: 12px; border-radius: 0 4px 4px 0; background: var(--series-1); }
+.dash .hb-bar.o1 { background: var(--dash-ord-1); }
+.dash .hb-bar.o2 { background: var(--dash-ord-2); }
+.dash .hb-bar.o3 { background: var(--dash-ord-3); }
+.dash .hb-bar.o4 { background: var(--dash-ord-4); }
+.dash .hb-bar.o5 { background: var(--dash-ord-5); }
+.dash .hb-val { position: absolute; top: 0; line-height: 16px; margin-left: 6px; font-weight: 600; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dash .hb-meta { display: inline-flex; align-items: center; gap: 8px; justify-self: end; }
+.dash .hb-meta:empty { display: none; }
+.dash .flag { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dash .flag svg, .dash .flag .status-icon { width: 13px; height: 13px; }
+
+/* ---------- linha (burndown) ---------- */
+.dash .lc-plot { position: relative; height: 160px; margin: 0 4px 0 30px; outline-offset: 4px; border-radius: 2px; }
+.dash .lc-plot .cols-grid { inset: 0; }
+.dash .lc-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: none; stroke: none; }
+.dash .lc-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.dash .lc-line.s1 { stroke: var(--series-1); }
+.dash .lc-line.ideal { stroke: var(--text-3); stroke-dasharray: 5 4; }
+.dash .lc-dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--series-1); box-shadow: 0 0 0 2px var(--panel); transform: translate(-50%, -50%); pointer-events: none; }
+.dash .lc-lab { position: absolute; font-size: 11px; font-weight: 600; line-height: 1; color: var(--text-2); white-space: nowrap; pointer-events: none; transform: translate(9px, -50%); }
+.dash .lc-lab.left { transform: translate(calc(-100% - 9px), -50%); }
+.dash .lc-lab.up { transform: translate(-100%, calc(-100% - 22px)); font-weight: 500; color: var(--text-3); }
+.dash .lc-cross { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: var(--border-strong); pointer-events: none; }
+.dash .lc-x { position: relative; height: 22px; margin: 0 4px 0 30px; font-size: 11px; color: var(--text-3); }
+.dash .lc-x span { position: absolute; top: 6px; transform: translateX(-50%); white-space: nowrap; }
+.dash .lc-x span:first-child { transform: none; }
+.dash .lc-x span:last-child { transform: translateX(-100%); }
+
+/* ---------- medidor (progresso) ---------- */
+.dash .meter { display: block; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--series-1) 16%, transparent); overflow: hidden; margin: 6px 0; }
+.dash .meter > span { display: block; height: 100%; border-radius: 4px; background: var(--series-1); }
+.dash .meter.late { background: var(--critical-weak); }
+.dash .meter.late > span { background: var(--critical); }
+
+/* ---------- tabelas ---------- */
+.dash .table-scroll { overflow-x: auto; max-width: 100%; }
+.dash .mini-table th.num, .dash .mini-table td.num { text-align: right; }
+.dash .mini-table td { white-space: nowrap; }
+.dash .pf { margin-top: 0; }
+.dash .pf td { padding: 7px 8px; vertical-align: middle; }
+.dash .pf-name { display: flex; align-items: center; gap: 7px; max-width: 240px; min-width: 0; text-align: left; font-weight: 550; }
+.dash .pf-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash .pf-name:hover span { text-decoration: underline; }
+.dash .pf-prog { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+.dash .pf-prog .meter { flex: 1; margin: 0; }
+.dash .pf-prog b { font-weight: 600; min-width: 3.2em; text-align: right; }
+.dash .pf .late { color: var(--critical); }
+.dash .pf .narrow { display: none; }
+@container card (max-width: 520px) {
+  .dash .pf .pf-status, .dash .pf .wide { display: none; }
+  .dash .pf .narrow { display: inline-grid; }
+  .dash .pf th, .dash .pf td { padding-left: 4px; padding-right: 4px; }
+  .dash .pf-name { max-width: 120px; }
+  .dash .pf-name span { white-space: normal; overflow-wrap: anywhere; }
+  .dash .pf-prog { min-width: 84px; gap: 6px; }
+  .dash .pf-prog b { min-width: 2.6em; }
+}
+.dash .late-text { color: var(--critical); }
+.dash .late-text svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
+.dash .pf .late svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; }
+
+/* ---------- mapa de calor (alocação) ---------- */
+.dash .heat { border-collapse: separate; border-spacing: 2px; font-size: 12px; }
+.dash .heat th { font-weight: 550; color: var(--text-3); padding: 4px 6px; text-align: left; white-space: nowrap; }
+.dash .heat thead th { max-width: 96px; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+.dash .heat tbody th { color: var(--text-2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.dash .heat td { min-width: 38px; height: 28px; padding: 0 6px; text-align: center; border-radius: 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash .heat td.h0 { background: var(--panel-2); color: var(--text-3); font-weight: 400; }
+.dash .heat td.h1 { background: var(--dash-heat-1); color: var(--dash-heat-ink-1); }
+.dash .heat td.h2 { background: var(--dash-heat-2); color: var(--dash-heat-ink-2); }
+.dash .heat td.h3 { background: var(--dash-heat-3); color: var(--dash-heat-ink-3); }
+.dash .heat td.h4 { background: var(--dash-heat-4); color: var(--dash-heat-ink-4); }
+.dash .heat td.h5 { background: var(--dash-heat-5); color: var(--dash-heat-ink-5); }
+.dash .heat td.total { background: none; color: var(--text); text-align: right; }
+.dash .heat td:hover { box-shadow: 0 0 0 2px var(--border-strong); }
+.dash .heat td.total:hover { box-shadow: none; }
+.dash .scale-key { display: flex; align-items: center; gap: 3px; margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+.dash .scale-key i { width: 16px; height: 10px; border-radius: 3px; }
+.dash .scale-key i:first-of-type { margin-left: 4px; }
+.dash .scale-key i:last-of-type { margin-right: 4px; }
+.dash .scale-key .h1 { background: var(--dash-heat-1); }
+.dash .scale-key .h2 { background: var(--dash-heat-2); }
+.dash .scale-key .h3 { background: var(--dash-heat-3); }
+.dash .scale-key .h4 { background: var(--dash-heat-4); }
+.dash .scale-key .h5 { background: var(--dash-heat-5); }
+
+/* ---------- seletor tarefas/pontos ---------- */
+.dash .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--panel-2); }
+.dash .seg button { font-size: 12px; padding: 2px 9px; border-radius: 6px; color: var(--text-2); }
+.dash .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+
+/* ---------- listas ---------- */
+.dash .due-row .tid { flex: none; }
+.dash .due-row .proj { flex: none; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash .feed-item { min-width: 0; }
+@container card (max-width: 380px) {
+  .dash .due-row .proj { display: none; }
+  .dash .feed-item { grid-template-columns: auto 1fr; }
+  .dash .feed-meta { grid-column: 2; }
+}
+
+/* ---------- tooltip (fica no body, fora de .dash) ---------- */
+.viz-tip .tip-title { font-size: 11.5px; opacity: 0.75; margin-bottom: 3px; }
+.viz-tip .tip-row { display: flex; align-items: center; gap: 6px; line-height: 1.55; white-space: nowrap; }
+.viz-tip .tip-row b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.viz-tip .tip-row span:last-child { opacity: 0.8; }
+.viz-tip .tip-key { width: 10px; height: 2px; border-radius: 1px; flex: none; background: currentColor; }
+.viz-tip .tip-key.s1 { background: var(--series-1); }
+.viz-tip .tip-key.s2 { background: var(--series-2); }
+.viz-tip .tip-key.ideal { background: var(--text-3); }
