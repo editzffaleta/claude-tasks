@@ -1,6 +1,6 @@
 # MCP `tarefas` — Referência completa
 
-> Servidor MCP 4.1.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
+> Servidor MCP 4.2.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
 
 O MCP `tarefas` é a ponte entre o Claude e o quadro central de tarefas. Com ele, o Claude registra, consulta, organiza e conclui tarefas de **qualquer projeto**, gerencia sprints, colunas, fluxos, labels, campos, membros, workspaces, automações e caixas de entrada, controla tempo, lê anexos, cria links públicos, importa e exporta tarefas e gera relatórios. Tudo vai para o mesmo banco do painel (http://localhost:4317).
 
@@ -1387,12 +1387,12 @@ E-mail (SMTP), provedor de IA, idioma padrão e endereço público ficam no pain
 
 #### `code_map`
 
-Consulta o mapa do código de um projeto, o mapa interativo que o plugin `mapa-do-codigo` gera na pasta `mapa-do-codigo/` dele (guia completo em [MAPA.md](MAPA.md)). Serve para o Claude se localizar antes de vasculhar o código do zero. É só leitura e precisa de um mapa já feito: não cria nem atualiza o mapa (isso é com o skill `mapa-do-codigo`, pedindo "faça o mapa do código deste projeto"). Responde em português: `status` em texto, as outras ações com o JSON do mapa, cujos nomes e descrições estão em português.
+Consulta o mapa do código de um projeto, o mapa interativo que o plugin `mapa-do-codigo` gera na pasta `mapa-do-codigo/` dele (guia completo em [MAPA.md](MAPA.md)). Serve para o Claude se localizar antes de vasculhar o código do zero. É só leitura e precisa de um mapa já feito: não cria nem atualiza o mapa (isso é com o skill `mapa-do-codigo`, pedindo "faça o mapa do código deste projeto"). Responde em português: `status` e `simulacao` em texto, as outras ações com o JSON do mapa, cujos nomes e descrições estão em português.
 
 | Parâmetro | Tipo | Descrição |
 | --- | --- | --- |
 | `project_path` / `project` | string | Sem eles: o projeto da pasta da sessão |
-| `action` | enum | `status` (padrão), `overview`, `find`, `show` ou `path` |
+| `action` | enum | `status` (padrão), `overview`, `find`, `show`, `path` ou `simulacao` |
 | `query` | string | `find`: o texto a procurar · `show`: id, caminho do arquivo ou `"MÉTODO /caminho"` do item |
 | `from` / `to` | string | `path`: o item de partida e o de chegada (id, arquivo ou endpoint) |
 
@@ -1403,6 +1403,7 @@ Consulta o mapa do código de um projeto, o mapa interativo que o plugin `mapa-d
 | `find` | partes, arquivos, endpoints e símbolos que combinam com `query` (até 15) |
 | `show` | o item, o que o usa e o que ele usa |
 | `path` | o caminho de ligações entre `from` e `to` |
+| `simulacao` | a última simulação de carga no Breakscale ([MAPA.md § 7.7](MAPA.md#77-simulação-no-breakscale)): os cenários (pedidos chegando e atendidos, falhas, p95, p99), os gargalos com a urgência, o porquê, a sugestão e a tarefa já criada a partir de cada um, quantas premissas ainda são estimativa, o que ficou fora do modelo e o link para o Breakscale. Sem simulação, diz como pedir uma |
 
 ```json
 { "project_path": "/Users/voce/Developer/Loja", "action": "find", "query": "pagamento" }
@@ -1418,7 +1419,8 @@ No painel: http://localhost:4317/?project=4&view=mapa
 ```
 
 - **Sem mapa:** a resposta explica como criar e onde ele vai aparecer no painel. **Projeto sem pasta:** diz que não há mapa possível.
-- `overview`, `find`, `show` e `path` rodam o `mapa-do-codigo/consulta.mjs` do projeto com o Node, na pasta do projeto, com limite de 30 s, e devolvem o JSON dele. Os ids têm a forma `n:<parte>`, `f:<caminho do arquivo>`, `r:<número do endpoint>` e `s:<arquivo>#<número>`; `show` e `path` também aceitam o caminho de um arquivo ou `"GET /caminho"`. A API REST oferece a mesma consulta em `GET /api/projects/:id/mapa/consulta` (ver [SISTEMA.md § 11.5](SISTEMA.md#115-mapa-do-código)).
+- `status` também diz se há simulação no Breakscale e quantos gargalos ela achou.
+- `overview`, `find`, `show` e `path` rodam a consulta do próprio plugin (nunca o `consulta.mjs` gravado na pasta do projeto) sobre o `mapa-do-codigo/grafo.json` do projeto, com o Node e limite de 30 s, e devolvem o JSON. Os ids têm a forma `n:<parte>`, `f:<caminho do arquivo>`, `r:<número do endpoint>` e `s:<arquivo>#<número>`; `show` e `path` também aceitam o caminho de um arquivo ou `"GET /caminho"`. A API REST oferece a mesma consulta em `GET /api/projects/:id/mapa/consulta` (ver [SISTEMA.md § 11.5](SISTEMA.md#115-mapa-do-código)).
 - Faltando `query` (ou `from` e `to`, em `path`), a ferramenta devolve erro.
 
 ---
@@ -1551,7 +1553,7 @@ As mensagens de erro são em português e dizem o que fazer. Por exemplo: `Colun
 
 | Método | Resposta |
 | --- | --- |
-| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.1.0, título "Quadro de tarefas"), `instructions` |
+| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.2.0, título "Quadro de tarefas"), `instructions` |
 | `notifications/initialized` | (notificação, sem resposta) |
 | `ping` | `{}` |
 | `tools/list` | `tools[]` com `name`, `title`, `description`, `inputSchema`, `annotations` |
@@ -1642,6 +1644,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 
 | Versão | Mudanças |
 | --- | --- |
+| **4.2** (Simulação no Breakscale) | `code_map` ganha `action: "simulacao"` (a última simulação de carga: cenários, gargalos, premissas e link), e o `status` cita a simulação. |
 | **4.1** (Mapa do código) | +1 ferramenta: `code_map` (situação, visão geral, busca, detalhe e caminho no mapa do código de um projeto, feito pelo plugin `mapa-do-codigo`). `show_in_dashboard` aceita `view: "mapa"`. |
 | **4.0** (paridade com o Taskosaur) | +11 ferramentas: `manage_comment`, `manage_labels`, `manage_fields`, `manage_members`, `manage_workspaces`, `share_link`, `search`, `export_tasks`, `import_tasks`, `show_in_dashboard`, `manage_inbox`. Novos campos nas tarefas: prioridade `lowest`, `story_points`, `remaining`, `reporter`, `watchers`, `fields`, dependências com tipo, recorrência com `weekdays`/`monthday`/`count` e frequência `quarterly`, sprint `"next"`, códigos `WEB-12`. Filtros `reporter`, `watcher`, `tag`. `add_comment` com `reply_to` e menções. `manage_project` com prefixo, status, prioridade, visibilidade, datas e workspace. `manage_columns` com transições e workflows. `manage_sprints` com `cancel`. `manage_automations` com 4 gatilhos (`task_updated`, `sprint_started`, `sprint_completed`, `project_created`), 3 ações (`set_column`, `send_email`, `move_to_sprint`), condição `field` e variáveis `{ref}`/`{sprint}`. Permissões com `CLAUDE_TASKS_ENFORCE` e no chat do painel (os três provedores), com as mesmas regras da API. `send_notification` com o tipo `claude`. Ferramentas assíncronas. `openWorldHint: true` em `import_tasks` e `manage_inbox`; `export_tasks` deixa de ser só leitura. |
 | **3.0** | +14 ferramentas: `update_tasks`, `delete_tasks`, `add_comment`, `manage_project`, `manage_columns`, `timer`, `time_report`, `get_attachment`, `get_overview`, `get_activity`, `send_notification`, `list_notifications`, `manage_automations`, `manage_settings`. Anotações e títulos em todas. `format: json`. Novos parâmetros: `add_tags`/`remove_tags`, `add_blocked_by`/`remove_blocked_by`, `position`, `time_spent`, filtros `column`/`parent_id`/`sort`. "me" (`CLAUDE_TASKS_USER`). Resources, templates, 9 prompts e autocompletar. |

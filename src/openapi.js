@@ -1010,8 +1010,45 @@ const OPS = [
       blueprint: { type: 'boolean' }, files: { type: ['integer', 'null'] }, parts: { type: ['integer', 'null'] },
       screens: { type: ['integer', 'null'] }, endpoints: { type: ['integer', 'null'] },
       health: obj({ total: { type: 'integer' }, high: { type: 'integer' } }), recent: { type: 'integer' },
+      simulation: {
+        type: ['object', 'null'], description: 'Resumo da última simulação no Breakscale, ou null',
+        properties: { generated_at: { type: 'string' }, scenarios: { type: 'integer' }, bottlenecks: { type: 'integer' }, urgent: { type: 'integer' } },
+      },
     }),
     desc: 'O mapa em si é servido em `/mapa/{id}/` (página com login) e a API dele em `/mapa/{id}/api/*`.',
+  }],
+  ['GET', '/api/projects/{id}/mapa/simulacao', T.projects, 'Simulação do projeto no Breakscale', {
+    perm: PERM.read,
+    res: obj({
+      nome: { type: 'string' }, geradoEm: { type: 'string' }, origem: { type: 'string', enum: ['local', 'hospedado'] },
+      link: { type: ['string', 'null'], description: 'Link de breakscale.tech com o modelo no fragmento (#)' },
+      temArquivo: { type: 'boolean', description: 'Há um simulacao.breakscale para baixar' },
+      componentes: arr(obj({ id: str, nome: str, tipo: str })),
+      cenarios: arr(obj({
+        fator: { type: 'number', description: 'Múltiplo do tráfego de base' }, nome: str, oferecido: { type: 'number' }, servido: { type: 'number' },
+        falhas: { type: 'number', description: 'Fração de 0 a 1' }, p50: { type: 'number' }, p95: { type: 'number' }, p99: { type: 'number' },
+        interrompido: { type: 'boolean' }, motivos: arr(obj({ motivo: str, texto: str, n: { type: 'integer' } })),
+        componentes: arr(obj({ id: str, entrada: { type: 'number' }, concluidas: { type: 'number' }, ocupacao: { type: 'number' }, esperando: { type: 'number' }, p99: { type: 'number' }, falhas: { type: 'number' }, recusadas: { type: 'number' }, tempoEsgotado: { type: 'number' } })),
+      })),
+      gargalos: arr(obj({
+        id: str, componente: str, nome: str, tipo: str, fator: { type: 'number' }, trafego: { type: 'number' },
+        severidade: { type: 'string', enum: ['alta', 'media', 'baixa'] }, titulo: str, porque: str, sugestao: { type: ['string', 'null'] },
+      })),
+      premissas: arr(obj({ componente: str, texto: str, origem: { type: 'string', enum: ['código', 'chute'] } })),
+      deixadoDeFora: arr(obj({ texto: str })),
+      tarefas: { type: 'object', description: 'id do gargalo → tarefa já criada a partir dele ({ id, ref, title, status })' },
+    }),
+    desc: 'Lê `mapa-do-codigo/simulacao.json`, gravado pelo `breakscale.mjs` do plugin do mapa. 404 quando ainda não há simulação.',
+  }],
+  ['GET', '/api/projects/{id}/mapa/simulacao/arquivo', T.projects, 'Baixar o modelo do Breakscale', {
+    perm: PERM.read,
+    desc: 'Devolve `simulacao.breakscale` como anexo; abre em breakscale.tech (Settings › Open a file) e na extensão do VS Code.',
+  }],
+  ['POST', '/api/projects/{id}/mapa/simulacao/tarefas', T.projects, 'Transformar gargalos em tarefas', {
+    perm: PERM.edit,
+    body: obj({ id: { type: 'string', description: 'Um gargalo' }, ids: arr(str) }),
+    res: obj({ tasks: arr(obj({ gargalo: str, duplicate: { type: 'boolean' }, task: obj({ id: { type: 'integer' }, ref: str, title: str, status: str }) })) }),
+    desc: 'Cada gargalo vira uma tarefa só (as repetições devolvem a existente com `duplicate: true`). Título, texto e prioridade vêm do resultado gravado.',
   }],
   ['GET', '/api/projects/{id}/mapa/consulta', T.projects, 'Consultar o mapa do código', {
     perm: PERM.read,

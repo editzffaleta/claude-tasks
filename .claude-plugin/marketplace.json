@@ -10,7 +10,7 @@
     {
       "name": "mapa-do-codigo",
       "source": "./mapa",
-      "description": "Mapa do código: um mapa interativo do seu código, em que cada parte, arquivo e pedido ao servidor tem um nome e uma descrição em português simples, com verificação de saúde, telas, fluxos guiados e destaque do trabalho recente. Adaptado do Floorplan, de Hayden Smith (licença MIT).",
+      "description": "Mapa do código: um mapa interativo do seu código, em que cada parte, arquivo e pedido ao servidor tem um nome e uma descrição em português simples, com verificação de saúde, telas, fluxos guiados, destaque do trabalho recente e simulação de carga no Breakscale. Adaptado do Floorplan, de Hayden Smith (licença MIT).",
       "category": "productivity"
     }
   ]

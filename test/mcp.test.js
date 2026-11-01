@@ -289,3 +289,24 @@ test('add_blocked_by mantém o tipo das dependências existentes', async () => {
   assert.deepEqual(deps, { [a]: 'start_start', [b]: 'finish_start' });
   s.db.close();
 });
+
+test('code_map: status cita a simulação e a action simulacao resume gargalos e premissas', async () => {
+  await call('add_tasks', { project_path: repo, tasks: [{ title: 'Garante o projeto' }] });
+  mkdirSync(join(repo, 'mapa-do-codigo'), { recursive: true });
+  writeFileSync(join(repo, 'mapa-do-codigo', 'index.html'), '<!doctype html>');
+  writeFileSync(join(repo, 'mapa-do-codigo', 'grafo.json'), JSON.stringify({ meta: { generatedAt: '2026-11-01T10:00:00Z', counts: { files: 1 } }, nodes: [], health: { issues: [] } }));
+  assert.match((await call('code_map', { project_path: repo })).text, /Simulação no Breakscale: nenhuma ainda/);
+  assert.match((await call('code_map', { project_path: repo, action: 'simulacao' })).text, /ainda não tem simulação/);
+  writeFileSync(join(repo, 'mapa-do-codigo', 'simulacao.json'), JSON.stringify({
+    $schema: 'mapa/simulacao@1', geradoEm: '2026-11-01T12:00:00Z', origem: 'local', link: 'https://breakscale.tech/#d3.AQID',
+    cenarios: [{ fator: 1, nome: 'Tráfego de base', oferecido: 50, servido: 50, falhas: 0, p95: 40, p99: 1500, componentes: [] }],
+    gargalos: [{ id: 'db', titulo: 'Banco não aguenta 2× o tráfego', porque: 'Fica 100% ocupado.', severidade: 'alta', sugestao: 'Cache.' }],
+    premissas: [{ texto: 'Pool de 10.', origem: 'código' }, { texto: '50/s.', origem: 'chute' }],
+  }));
+  assert.match((await call('code_map', { project_path: repo })).text, /1 gargalo\(s\), 1 urgente\(s\)/);
+  const sim = (await call('code_map', { project_path: repo, action: 'simulacao' })).text;
+  assert.match(sim, /das quais 1 ainda são estimativas/);
+  assert.match(sim, /Tráfego de base: 50\/s chegando, 50\/s atendidos, 0% falham, p95 40 ms, p99 1\.5 s/);
+  assert.match(sim, /\[urgente\] Banco não aguenta 2× o tráfego\. Fica 100% ocupado\. Sugestão: Cache\. \(sem tarefa\)/);
+  assert.match(sim, /Abrir no Breakscale: https:\/\/breakscale\.tech\/#d3\.AQID/);
+});

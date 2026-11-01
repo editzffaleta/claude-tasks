@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { FIELD_TYPES, ROLES, ROLE_LABEL, cleanId, formatTask } from '../db.js';
 import { exportCsv, fetchJira, fetchTrello, importCsv, importJiraIssues, importTrelloBoard } from '../importers.js';
-import { mapStatus, queryMap } from '../mapa.js';
+import { mapStatus, queryMap, readSimulation, simulationTasks } from '../mapa.js';
 import {
   CLAUDE, actingUser, boardLink, guardAdmin, guardProject, guardTask, me, projectFrom, requireProject, store, taskLink, userIds, visible,
 } from './context.js';
@@ -19,6 +19,35 @@ const projectProps = {
   project_path: { type: 'string', description: 'Absolute path inside the project (normally your current working directory).' },
   project: { type: 'string', description: 'Project name, id or code prefix.' },
 };
+
+const pctText = (v) => (v == null ? '?' : `${Math.round(v * 1000) / 10}%`);
+const msText = (v) => (v == null ? '?' : v >= 1000 ? `${Math.round(v / 100) / 10} s` : `${Math.round(v)} ms`);
+const SEVERITY_TEXT = { alta: 'urgente', media: 'atenção', baixa: 'pode esperar' };
+
+// A última simulação do Breakscale, em texto para o Claude.
+function simulationText(project) {
+  const sim = readSimulation(project);
+  if (!sim) return `${project.name} ainda não tem simulação no Breakscale. Para fazer, use o skill mapa-do-codigo na pasta ${project.path} ("simule este projeto no Breakscale").`;
+  const tasks = simulationTasks(store, project);
+  const guessed = sim.premissas.filter((p) => p.origem !== 'código').length;
+  const lines = [
+    `Simulação no Breakscale de ${project.name}, feita em ${sim.geradoEm?.slice(0, 16).replace('T', ' ') || '?'} (${sim.origem === 'hospedado' ? 'servidor do Breakscale' : 'neste computador'}).`,
+    `Premissas: ${sim.premissas.length}, das quais ${guessed} ainda são estimativas.`,
+    '',
+    'Cenários:',
+    ...sim.cenarios.map((c) => `- ${c.nome || `${c.fator}×`}: ${c.oferecido ?? '?'}/s chegando, ${c.servido ?? '?'}/s atendidos, ${pctText(c.falhas)} falham, p95 ${msText(c.p95)}, p99 ${msText(c.p99)}${c.interrompido ? ' (parcial)' : ''}`),
+    '',
+    sim.gargalos.length ? 'Gargalos:' : 'Nenhum gargalo nos cenários simulados.',
+    ...sim.gargalos.map((g) => {
+      const t = tasks[g.id];
+      return `- [${SEVERITY_TEXT[g.severidade]}] ${g.titulo}. ${g.porque || ''}${g.sugestao ? ` Sugestão: ${g.sugestao}` : ''}${t ? ` (tarefa ${t.ref}, ${t.status})` : ' (sem tarefa)'}`;
+    }),
+  ];
+  if (sim.deixadoDeFora.length) lines.push('', 'Fora do modelo:', ...sim.deixadoDeFora.map((x) => `- ${x.texto}`));
+  if (sim.link) lines.push('', `Abrir no Breakscale: ${sim.link}`);
+  lines.push(`No painel: ${boardLink(project)}&view=mapa (aba Simulação)`);
+  return lines.join('\n');
+}
 
 export const EXTRA_TOOLS = {
   manage_comment: {
@@ -379,13 +408,13 @@ export const EXTRA_TOOLS = {
 
   code_map: {
     title: 'Mapa do código',
-    description: 'Look things up in a project\'s code map (made by the "mapa-do-codigo" plugin into the mapa-do-codigo/ folder): status, an overview of the parts, find a part/file/endpoint/function by name or text, show one item with what uses it and what it uses, or the path between two items. Use it before searching the code from scratch when the project has a map. To create or update the map, use the mapa-do-codigo skill ("faça o mapa do código"). Answers are in Portuguese.',
+    description: 'Look things up in a project\'s code map (made by the "mapa-do-codigo" plugin into the mapa-do-codigo/ folder): status, an overview of the parts, find a part/file/endpoint/function by name or text, show one item with what uses it and what it uses, the path between two items, or the last Breakscale load simulation (where the system breaks as traffic grows). Use it before searching the code from scratch when the project has a map. To create or update the map, use the mapa-do-codigo skill ("faça o mapa do código"); to simulate, ask it to "simule este projeto no Breakscale". Answers are in Portuguese.',
     annotations: READ,
     inputSchema: {
       type: 'object',
       properties: {
         ...projectProps,
-        action: { type: 'string', enum: ['status', 'overview', 'find', 'show', 'path'], description: 'Default status.' },
+        action: { type: 'string', enum: ['status', 'overview', 'find', 'show', 'path', 'simulacao'], description: 'Default status. simulacao = the last Breakscale simulation: scenarios, bottlenecks, assumptions.' },
         query: { type: 'string', description: 'find: text to look for · show: id, file path or "METHOD /path" of the item.' },
         from: { type: 'string', description: 'path: starting item (id, file or endpoint).' },
         to: { type: 'string', description: 'path: target item.' },
@@ -404,9 +433,11 @@ export const EXTRA_TOOLS = {
           `Gerado em ${s.generated_at?.slice(0, 16).replace('T', ' ') || '?'} pelo ${s.agent === 'codex' ? 'Codex' : 'Claude'}`,
           `${s.parts ?? '?'} partes · ${s.files ?? '?'} arquivos · ${s.endpoints ?? 0} endpoints · ${s.screens ?? 0} telas`,
           `Saúde: ${s.health.total} aviso(s), ${s.health.high} importante(s)${s.recent ? ` · ${s.recent} item(ns) de trabalho recente` : ''}`,
+          s.simulation ? `Simulação no Breakscale: ${s.simulation.bottlenecks} gargalo(s), ${s.simulation.urgent} urgente(s), feita em ${s.simulation.generated_at?.slice(0, 16).replace('T', ' ') || '?'} (action "simulacao" para ver)` : 'Simulação no Breakscale: nenhuma ainda',
           `No painel: ${boardLink(project)}&view=mapa`,
         ].join('\n');
       }
+      if (action === 'simulacao') return simulationText(project);
       const cmd = { overview: ['overview'], find: ['find', args.query], show: ['show', args.query], path: ['path', args.from, args.to] }[action];
       if (cmd.slice(1).some((x) => !String(x ?? '').trim())) throw new Error(action === 'path' ? 'Informe from e to' : 'Informe query');
       return queryMap(project, cmd);

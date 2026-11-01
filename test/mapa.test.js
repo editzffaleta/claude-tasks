@@ -170,3 +170,80 @@ test('tarefas criadas sobre um cartão ficam presas a ele; dá para criar mais d
   assert.deepEqual(tasks.filter((t) => t.cards.includes('n:api')).map((t) => t.id).sort(), [a.task.id, b.task.id].sort());
 });
 
+
+// Simulação no Breakscale, como o breakscale.mjs do plugin grava.
+function writeSimulation(root, extra = {}) {
+  const sim = {
+    $schema: 'mapa/simulacao@1',
+    nome: 'Loja',
+    geradoEm: '2026-11-01T12:00:00.000Z',
+    origem: 'local',
+    pacote: 'breakscale-mcp@0.1.1',
+    link: 'https://breakscale.tech/#d3.AQID',
+    arquivo: 'simulacao.breakscale',
+    componentes: [{ id: 'origem-web', nome: 'Usuários', tipo: 'client' }, { id: 'api', nome: 'Servidor da loja', tipo: 'service' }, { id: 'pg', nome: 'Postgres', tipo: 'db' }],
+    cenarios: [
+      { fator: 1, nome: 'Tráfego de base', oferecido: 50, servido: 50, falhas: 0, p50: 20, p95: 40, p99: 80, motivos: [], componentes: [{ id: 'api', ocupacao: 0.3 }, { id: 'pg', ocupacao: 0.6 }], link: 'javascript:alert(1)' },
+      { fator: 2, nome: '2× o tráfego', oferecido: 100, servido: 92, falhas: 0.08, p50: 30, p95: 400, p99: 900, motivos: [{ motivo: 'shed', texto: 'foram recusados por uma fila cheia', n: 240 }], componentes: [{ id: 'api', ocupacao: 0.6 }, { id: 'pg', ocupacao: 1, recusadas: 8 }] },
+    ],
+    gargalos: [
+      { id: 'pg', componente: 'pg', nome: 'Postgres', tipo: 'db', fator: 2, trafego: 100, severidade: 'alta', titulo: 'Postgres não aguenta 2× o tráfego', porque: 'Com 2× o tráfego, Postgres fica 100% ocupado.', sugestao: 'Pôr um cache na frente.' },
+      { id: 'api', componente: 'api', nome: 'Servidor da loja', tipo: 'service', fator: 10, trafego: 500, severidade: 'baixa', titulo: 'Servidor da loja não aguenta 10× o tráfego', porque: 'Fila cheia.', sugestao: null, extra: '<script>' },
+    ],
+    premissas: [{ componente: 'pg', texto: 'Pool de 10 conexões (src/db.js:4).', origem: 'código' }, { componente: 'origem-web', texto: '50 pedidos por segundo.', origem: 'chute' }],
+    deixadoDeFora: [{ texto: 'O Stripe ficou de fora.' }],
+    ...extra,
+  };
+  writeFileSync(join(root, 'mapa-do-codigo', 'simulacao.json'), JSON.stringify(sim));
+  writeFileSync(join(root, 'mapa-do-codigo', 'simulacao.breakscale'), JSON.stringify({ app: 'breakscale', version: 1, topology: { nodes: [], edges: [] } }));
+  return sim;
+}
+
+test('simulação: o status resume, a API devolve só o que é esperado e o modelo pode ser baixado', async () => {
+  assert.equal(ok(await req(`/api/projects/${P.id}/mapa`)).simulation, null);
+  assert.equal((await req(`/api/projects/${P.id}/mapa/simulacao`)).status, 404);
+  writeSimulation(repo);
+  const s = ok(await req(`/api/projects/${P.id}/mapa`)).simulation;
+  assert.deepEqual([s.scenarios, s.bottlenecks, s.urgent], [2, 2, 1]);
+  const sim = ok(await req(`/api/projects/${P.id}/mapa/simulacao`));
+  assert.equal(sim.link, 'https://breakscale.tech/#d3.AQID');
+  assert.equal(sim.cenarios[0].link, null, 'links que não são do Breakscale são descartados');
+  assert.equal(sim.gargalos[1].extra, undefined, 'campos desconhecidos não passam');
+  assert.equal(sim.temArquivo, true);
+  assert.deepEqual(sim.tarefas, {});
+  const file = await req(`/api/projects/${P.id}/mapa/simulacao/arquivo`);
+  assert.equal(file.status, 200);
+  assert.match(file.headers.get('content-disposition'), /attachment; filename\*=UTF-8''loja\.breakscale/);
+  assert.equal(file.data.app, 'breakscale');
+  writeSimulation(repo, { link: 'https://evil.example/#x' });
+  assert.equal(ok(await req(`/api/projects/${P.id}/mapa/simulacao`)).link, null);
+  // Visualizador vê; quem não é membro de um projeto privado, não.
+  assert.equal((await req(`/api/projects/${P.id}/mapa/simulacao`, { as: 'vera' })).status, 200);
+  assert.equal((await req(`/api/projects/${Q.id}/mapa/simulacao`, { as: 'ana' })).status, 403);
+});
+
+test('simulação: cada gargalo vira uma tarefa só, com o texto gravado, e aparece no cartão do mapa', async () => {
+  writeSimulation(repo);
+  const r = ok(await req(`/api/projects/${P.id}/mapa/simulacao/tarefas`, { method: 'POST', body: { ids: ['pg', 'api'] } }));
+  assert.deepEqual(r.tasks.map((x) => [x.gargalo, x.duplicate]), [['pg', false], ['api', false]]);
+  const t = ok(await req(`/api/tasks/${r.tasks[0].task.id}`));
+  assert.equal(t.title, 'Postgres não aguenta 2× o tráfego');
+  assert.equal(t.priority, 'high');
+  assert.equal(t.type, 'task');
+  assert.ok(t.tags.includes('mapa') && t.tags.includes('simulação'));
+  assert.match(t.description, /Pôr um cache na frente/);
+  assert.match(t.description, /\[Abrir no Breakscale\]\(https:\/\/breakscale\.tech\/#d3\.AQID\)/);
+  assert.equal(ok(await req(`/api/tasks/${r.tasks[1].task.id}`)).priority, 'low');
+  const again = ok(await req(`/api/projects/${P.id}/mapa/simulacao/tarefas`, { method: 'POST', body: { id: 'pg' } }));
+  assert.deepEqual([again.tasks[0].duplicate, again.tasks[0].task.id], [true, r.tasks[0].task.id]);
+  assert.equal(ok(await req(`/api/projects/${P.id}/mapa/simulacao`)).tarefas.pg.id, r.tasks[0].task.id);
+  // O gargalo "api" é a parte "api" do mapa: a tarefa fica presa ao cartão dela.
+  const { tasks } = ok(await req(`/mapa/${P.id}/api/quadro/tarefas`));
+  assert.ok(tasks.find((x) => x.id === r.tasks[1].task.id).cards.includes('n:api'));
+  assert.equal((await req(`/api/projects/${P.id}/mapa/simulacao/tarefas`, { method: 'POST', body: { id: 'nao-existe' } })).status, 404);
+  const before = ok(await req('/api/state')).tasks?.length;
+  assert.equal((await req(`/api/projects/${P.id}/mapa/simulacao/tarefas`, { method: 'POST', body: { ids: ['pg', 'nao-existe'] } })).status, 404, 'um id errado recusa a lista toda');
+  assert.equal(ok(await req('/api/state')).tasks?.length, before);
+  assert.equal((await req(`/api/projects/${P.id}/mapa/simulacao/tarefas`, { method: 'POST', body: {} })).status, 400);
+  assert.equal((await req(`/api/projects/${P.id}/mapa/simulacao/tarefas`, { method: 'POST', as: 'vera', body: { id: 'pg' } })).status, 403);
+});
