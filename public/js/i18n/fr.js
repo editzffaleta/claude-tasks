@@ -340,7 +340,7 @@ export default {
   'usa o MCP do quadro': 'utilise le MCP du tableau',
   'Nova conversa': 'Nouvelle conversation',
   'Fechar (C)': 'Fermer (C)',
-  'Ex.: move as tarefas de UI do SIRAC para a próxima sprint': 'Ex. : déplace les tâches d’UI de SIRAC vers le prochain sprint',
+  'Ex.: move as tarefas de UI da Loja Online para a próxima sprint': 'Ex. : déplace les tâches d’UI de Loja Online vers le prochain sprint',
   'Mensagem para o Claude': 'Message pour Claude',
   'Enviar': 'Envoyer',
   'Sem resposta.': 'Pas de réponse.',

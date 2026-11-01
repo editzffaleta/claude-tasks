@@ -219,7 +219,7 @@ outra sessão ─▶ hook SessionStart mostra as pendências ─▶ /mcp__tarefa
 | "O que tem pendente aqui?" | `list_tasks` ou o prompt `pendencias` |
 | "Quebra essa feature em etapas" | `add_tasks` com `parent_id` e `blocked_by` |
 | "Coloca as tarefas de UI na próxima sprint" | `manage_sprints` + `update_tasks` com `sprint: "next"` |
-| "Quanto tempo gastei no SIRAC essa semana?" | `time_report` |
+| "Quanto tempo gastei na Loja Online essa semana?" | `time_report` |
 | "Olha o print que eu anexei na WEB-12" | `get_task` + `get_attachment` |
 | "Cria uma coluna Homologação e só deixa ir para Concluídas a partir dela" | `manage_columns` (`create` e `set_transitions`) |
 | "Toda tarefa bloqueada vira urgente" | `manage_automations` |
@@ -1500,9 +1500,9 @@ Quando o argumento `projeto` é omitido, o prompt usa o projeto da pasta da sess
 **Exemplos:**
 
 ```
-/mcp__tarefas__pendencias SIRAC
+/mcp__tarefas__pendencias "Loja Online"
 /mcp__tarefas__concluir 47 corrigido o cálculo e adicionado teste
-/mcp__tarefas__planejar_sprint AlphaClaim 10 "entregar o fluxo de sinistro"
+/mcp__tarefas__planejar_sprint "Loja Online" 10 "entregar o checkout novo"
 /mcp__tarefas__relatorio semana
 ```
 
