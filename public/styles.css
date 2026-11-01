@@ -624,6 +624,7 @@ h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.015em; whi
   cursor: pointer;
   min-width: 0;
 }
+.g-label .tid { flex: none; white-space: nowrap; }
 .g-label .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .g-label:hover .t { color: var(--accent); }
 .g-track { position: relative; flex: none; }

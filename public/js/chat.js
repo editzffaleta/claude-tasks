@@ -100,7 +100,7 @@ function render() {
     </div>
     <div class="chat-messages" id="chat-messages"></div>
     <form class="chat-input" data-form="chat">
-      <textarea name="message" rows="2" placeholder="${esc(t('Ex.: move as tarefas de UI do SIRAC para a próxima sprint'))}" aria-label="${esc(t('Mensagem para o Claude'))}" ${busy ? 'disabled' : ''}></textarea>
+      <textarea name="message" rows="2" placeholder="${esc(t('Ex.: move as tarefas de UI da Loja Online para a próxima sprint'))}" aria-label="${esc(t('Mensagem para o Claude'))}" ${busy ? 'disabled' : ''}></textarea>
       <button class="btn primary icon-only" type="submit" aria-label="${esc(t('Enviar'))}" ${busy ? 'disabled' : ''}>${ICON.send}</button>
     </form>`;
   renderMessages();
