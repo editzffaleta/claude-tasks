@@ -768,7 +768,7 @@ const schemas = {
   },
 
   // ----- tempo real -----
-  Version: obj({ version: d(str, 'Muda a cada gravação no banco (de qualquer processo)'), unread: int }),
+  Version: obj({ version: d(str, 'Muda a cada gravação no banco (de qualquer processo)'), unread: int, panel: d(str, 'Versão dos arquivos do painel: muda quando o código em public/ muda') }),
   UiCommand: obj({
     task: d(ID, 'Abrir esta tarefa'),
     project: d(ID, 'Ir para este projeto'),
@@ -777,7 +777,8 @@ const schemas = {
   SseEvent: {
     description: 'Cada mensagem tem as linhas `event:` e `data:` (JSON). Comentários `: ping` a cada 25 s mantêm a conexão.',
     oneOf: [
-      { title: 'hello', ...obj({ event: { const: 'hello' }, data: obj({ version: str, unread: int }) }, ['event', 'data'], 'Logo ao conectar') },
+      { title: 'hello', ...obj({ event: { const: 'hello' }, data: obj({ version: str, unread: int, panel: str }) }, ['event', 'data'], 'Logo ao conectar') },
+      { title: 'panel', ...obj({ event: { const: 'panel' }, data: obj({ panel: str }) }, ['event', 'data'], 'Os arquivos do painel mudaram: uma janela já aberta pode recarregar') },
       { title: 'change', ...obj({ event: { const: 'change' }, data: obj({ version: str }) }, ['event', 'data'], 'O banco mudou: recarregue o que está na tela') },
       { title: 'unread', ...obj({ event: { const: 'unread' }, data: obj({ unread: int }) }, ['event', 'data'], 'Mudou o número de notificações não lidas') },
       { title: 'ui', ...obj({ event: { const: 'ui' }, data: ref('UiCommand') }, ['event', 'data'], 'Comando para o painel') },
@@ -892,11 +893,11 @@ const OPS = [
   ['GET', '/api/events', T.live, 'Eventos em tempo real (SSE)', {
     sse: true, errors: [401],
     desc: 'Server-Sent Events. Ao conectar chega `hello`; depois `change` quando o banco muda (inclusive por outro processo, como o MCP), '
-      + '`unread` quando muda o número de notificações não lidas e `ui` com comandos para o painel. O servidor confere a cada 0,7 s, '
+      + '`unread` quando muda o número de notificações não lidas, `panel` quando mudam os arquivos do painel e `ui` com comandos para o painel. O servidor confere a cada 0,7 s, '
       + 'manda `: ping` a cada 25 s e sugere `retry: 3000`. Use com `new EventSource(\'/api/events\')`.',
   }],
   ['GET', '/api/version', T.live, 'Versão do banco e notificações não lidas', {
-    res: ref('Version'), desc: 'Alternativa ao SSE para consultar de tempos em tempos: se `version` mudou, recarregue com `GET /api/state`.',
+    res: ref('Version'), desc: 'Alternativa ao SSE para consultar de tempos em tempos: se `version` mudou, recarregue com `GET /api/state`; se `panel` mudou, o código do painel é outro.',
   }],
   ['GET', '/api/ui-commands', T.live, 'Pegar comandos pendentes para o painel', {
     res: arr(ref('UiCommand')),
@@ -1348,7 +1349,7 @@ function success(o) {
   if (o.sse) {
     return {
       description: 'Fluxo de eventos',
-      content: { 'text/event-stream': { schema: ref('SseEvent'), example: 'retry: 3000\n\nevent: hello\ndata: {"version":"42.3","unread":0}\n\nevent: change\ndata: {"version":"43.3"}\n\n' } },
+      content: { 'text/event-stream': { schema: ref('SseEvent'), example: 'retry: 3000\n\nevent: hello\ndata: {"version":"42.3","unread":0,"panel":"3f9a1c7e20b4"}\n\nevent: change\ndata: {"version":"43.3"}\n\n' } },
     };
   }
   if (o.ndjson) {

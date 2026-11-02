@@ -8,6 +8,7 @@ import { BOARD_URL, PORT, Store } from './db.js';
 import { attachEngine, tick } from './engine.js';
 import { syncDueInboxes } from './inbox.js';
 import { closeMapServers, handleMapRoute } from './mapa.js';
+import { panelVersionReader } from './panelversion.js';
 import { HttpError, buildRoutes } from './routes.js';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -44,7 +45,8 @@ const cookieFlags = (req) => `Path=/; HttpOnly; SameSite=Lax${secure(req) ? '; S
 const setSession = (res, token) => res.setHeader('set-cookie', `${COOKIE}=${token}; Max-Age=${90 * 86400}; ${cookieFlags(res.req)}`);
 const clearSession = (res) => res.setHeader('set-cookie', `${COOKIE}=; Max-Age=0; ${cookieFlags(res.req)}`);
 
-const routes = buildRoutes({ store, setSession, clearSession });
+const panelVersion = panelVersionReader(PUBLIC);
+const routes = buildRoutes({ store, setSession, clearSession, panelVersion });
 
 function parseCookies(req) {
   return Object.fromEntries((req.headers.cookie || '').split(';').map((c) => c.trim().split('=')).filter(([k]) => k).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
@@ -70,9 +72,11 @@ async function readBody(req, limit) {
 // ---- tempo real: Server-Sent Events ----
 // Um único laço confere a versão do banco (que muda com gravações de qualquer processo,
 // inclusive do MCP) e avisa todas as abas abertas. O cliente recarrega o que precisa.
+// O mesmo laço avisa quando os arquivos do painel mudam, para as abas oferecerem recarregar.
 
 const clients = new Set();
 let lastVersion = store.version();
+let lastPanel = panelVersion();
 
 function sse(client, event, data) {
   if (!client.res.writableEnded) client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -88,7 +92,7 @@ function openStream(req, res, user) {
   res.write('retry: 3000\n\n');
   const client = { res, user, unread: store.unreadCount(user?.id) };
   clients.add(client);
-  sse(client, 'hello', { version: store.version(), unread: client.unread });
+  sse(client, 'hello', { version: store.version(), unread: client.unread, panel: panelVersion() });
   req.on('close', () => clients.delete(client));
 }
 
@@ -98,8 +102,12 @@ function pump() {
   try { version = store.version(); } catch { return; }
   const changed = version !== lastVersion;
   lastVersion = version;
+  const panel = panelVersion();
+  const panelChanged = panel !== lastPanel;
+  lastPanel = panel;
   for (const client of clients) {
     try {
+      if (panelChanged) sse(client, 'panel', { panel });
       if (changed) {
         sse(client, 'change', { version });
         const unread = store.unreadCount(client.user?.id);

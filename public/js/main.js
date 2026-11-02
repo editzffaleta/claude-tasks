@@ -63,9 +63,11 @@ async function renderView(reason) {
   return mod[fn](el);
 }
 
+// Estes eventos só mudam a estrutura em volta; a tela aberta não precisa ser redesenhada.
+const SHELL_ONLY = new Set(['unread', 'live', 'panel']);
 subscribe((what) => {
   renderShell();
-  if (what !== 'unread' && what !== 'live') renderView(what);
+  if (!SHELL_ONLY.has(what)) renderView(what);
 });
 
 function isTyping() {

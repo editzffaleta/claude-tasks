@@ -54,7 +54,7 @@ function sendFile(res, path, { mime, name, size, inline }) {
   createReadStream(path).on('error', () => res.end()).pipe(res);
 }
 
-export function buildRoutes({ store, setSession, clearSession }) {
+export function buildRoutes({ store, setSession, clearSession, panelVersion }) {
   const vis = (user) => store.visibleProjectIds(user);
   // Projeto inexistente é 404 também para administradores (projectRole não confere a existência).
   const guard = (user, project, level) => {
@@ -288,7 +288,7 @@ export function buildRoutes({ store, setSession, clearSession }) {
     }, pub],
 
     // ===== sessão e preferências =====
-    ['GET', /^\/api\/version$/, ({ user }) => ({ version: store.version(), unread: store.unreadCount(user?.id) })],
+    ['GET', /^\/api\/version$/, ({ user }) => ({ version: store.version(), unread: store.unreadCount(user?.id), panel: panelVersion() })],
     ['GET', /^\/api\/me\/settings$/, ({ user }) => store.userSettings(user?.id)],
     ['PATCH', /^\/api\/me\/settings$/, ({ user, body }) => store.updateUserSettings(user.id, body)],
     ['POST', /^\/api\/me\/avatar$/, ({ user, body, req }) => ({ avatar: store.setAvatar('user', user.id, { data: body, mime: req.headers['content-type'] }) }), raw],
