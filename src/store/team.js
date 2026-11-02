@@ -16,6 +16,7 @@ export const DEFAULT_USER_SETTINGS = {
   language: null,
   theme: 'system',
   default_view: 'board',
+  single_keys: true,
   notify: Object.fromEntries(NOTIFY_TYPES.map((t) => [t, { app: true, email: false, os: true }])),
 };
 
@@ -217,6 +218,7 @@ export const teamMethods = {
     if (patch.language !== undefined) clean.language = cleanEnum(patch.language, 'language', ['pt', 'en', 'es', 'fr', 'de']) ?? null;
     if (patch.theme !== undefined) clean.theme = cleanEnum(patch.theme, 'theme', ['system', 'light', 'dark']) || 'system';
     if (patch.default_view !== undefined) clean.default_view = cleanEnum(patch.default_view, 'default_view', ['board', 'list', 'calendar', 'gantt', 'dashboard']) || 'board';
+    if (patch.single_keys !== undefined) clean.single_keys = !!patch.single_keys;
     if (patch.notify !== undefined) {
       const current = this.userSettings(user_id).notify;
       for (const [type, ch] of Object.entries(patch.notify || {})) {

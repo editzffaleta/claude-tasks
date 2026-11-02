@@ -288,6 +288,7 @@ const USER_SETTINGS = obj({
   language: nul(enm(['pt', 'en', 'es', 'fr', 'de'], 'null = idioma padrão da conta')),
   theme: enm(['system', 'light', 'dark']),
   default_view: enm(['board', 'list', 'calendar', 'gantt', 'dashboard']),
+  single_keys: d(bool, 'Atalhos de uma tecla no painel (N, C, K, / e 1 a 5)'),
   notify: d({ type: 'object', additionalProperties: ref('NotifyChannels') }, `Canais por tipo: ${NOTIFY_TYPES.join(', ')}`),
 });
 

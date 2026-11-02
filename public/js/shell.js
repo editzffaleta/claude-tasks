@@ -6,9 +6,10 @@ import { openPalette } from './palette.js';
 import { openSprints } from './sprints.js';
 import {
   state, navigate, load, currentProject, activeFilterCount, emit, TASK_VIEWS, can, isAdmin, workspaceById, workspaceTree,
-  since, isNew, markSeen, scopedProjectIds, userById,
+  since, markSeen, newTasks, singleKeys, triageable, userById,
 } from './state.js';
 import { openNewTask } from './taskform.js';
+import { openTriage } from './triage.js';
 import { confirmAction, openDialog, showMenu } from './ui.js';
 import {
   $, ICON, PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, VISIBILITY_LABEL, ago, avatar, debounce, esc, fmtClock, notificationText, projectBadge, tilde,
@@ -173,7 +174,7 @@ function renderFoot() {
     ${isAdmin() ? page('settings', ICON.gear, t('Configurações')) : ''}
     ${isAdmin() ? page('admin', ICON.shield, t('Administração')) : ''}
     <div class="foot-row">
-      <button class="user-chip" data-go="user-menu">${avatar(me, { size: 24 })}<span>${esc(me?.name || '')}</span>${ICON.down}</button>
+      <button class="user-chip" data-go="user-menu" aria-haspopup="menu" aria-expanded="false">${avatar(me, { size: 24 })}<span>${esc(me?.name || '')}</span>${ICON.down}</button>
       <div class="live" title="${esc(t('Atualização automática'))}"><span class="live-dot"></span><span>${t('ao vivo')}</span></div>
     </div>`;
 }
@@ -318,7 +319,7 @@ function renderHeading() {
       ${p?.key ? `<span class="chip mono">${esc(p.key)}</span>` : ''}
       ${p?.visibility && p.visibility !== 'internal' ? `<span class="chip">${p.visibility === 'private' ? ICON.lock : ICON.globe}${esc(VISIBILITY_LABEL[p.visibility])}</span>` : ''}
       ${p?.archived_at ? `<span class="chip">${t('arquivado')}</span>` : ''}
-      ${p ? `<button class="icon-btn small" data-action="project-menu" aria-label="${esc(t('Opções do projeto'))}">${ICON.more}</button>` : ''}
+      ${p ? `<button class="icon-btn small" data-action="project-menu" aria-label="${esc(t('Opções do projeto'))}" aria-haspopup="menu" aria-expanded="false">${ICON.more}</button>` : ''}
       ${ws ? `<button class="icon-btn small" data-action="clear-ws" aria-label="${esc(t('Ver todos os projetos'))}" title="${esc(t('Ver todos os projetos'))}">${ICON.close}</button>` : ''}
       <span class="heading-sub ${p?.path ? 'is-path' : ''}" title="${esc(sub)}">${esc(sub)}</span>
     </div>`;
@@ -384,11 +385,12 @@ function renderActions() {
         <span class="timer-title">#${timer.task_id} ${esc(timer.task_title)}</span>
         <button class="icon-btn tiny" data-action="stop-timer" title="${esc(t('Parar timer'))}" aria-label="${esc(t('Parar timer'))}">${ICON.stop}</button>
       </div>` : ''}
-    <button class="icon-btn bell" data-action="notifications" aria-label="${esc(t('Notificações'))}" title="${esc(t('Notificações'))}">
+    <button class="icon-btn bell" data-action="notifications" aria-label="${esc(t('Notificações'))}" title="${esc(t('Notificações'))}" aria-haspopup="dialog" aria-expanded="false">
       ${ICON.bell}${state.unread ? `<span class="badge">${state.unread > 99 ? '99+' : state.unread}</span>` : ''}
     </button>
-    ${writer ? `<button class="icon-btn ${document.body.classList.contains('chat-open') ? 'on' : ''}" data-action="chat" aria-label="${esc(t('Chat com o Claude'))}" title="${esc(t('Chat com o Claude (C)'))}">${ICON.sparkles}</button>` : ''}
-    ${writer && (!state.projectId || can(state.projectId, 'edit')) ? `<button class="btn primary" data-action="new-task">${ICON.plus}<span class="hide-sm">${t('Nova tarefa')}</span> <kbd class="hide-sm">N</kbd></button>` : ''}`;
+    ${writer ? `<button class="icon-btn ${document.body.classList.contains('chat-open') ? 'on' : ''}" data-action="chat" aria-label="${esc(t('Chat com o Claude'))}" title="${esc(singleKeys() ? t('Chat com o Claude (C)') : t('Chat com o Claude'))}">${ICON.sparkles}</button>` : ''}
+    ${writer && (!state.projectId || can(state.projectId, 'edit')) ? `<button class="btn primary" data-action="new-task">${ICON.plus}<span class="hide-sm">${t('Nova tarefa')}</span>${singleKeys() ? ' <kbd class="hide-sm">N</kbd>' : ''}</button>` : ''}`;
+  keepPanelAnchorExpanded();
 }
 
 function tickTimer() {
@@ -419,6 +421,7 @@ async function onActionsClick(e) {
 }
 
 async function showNotifications(anchor) {
+  if (panelOpenFrom(anchor)) return closePanel({ restore: true });
   const data = await attempt(() => api('/api/notifications'));
   if (!data) return;
   const panel = floatingPanel(anchor, `
@@ -435,7 +438,7 @@ async function showNotifications(anchor) {
     if (e.target.closest('[data-prefs]')) { closePanel(); return navigate({ projectId: null, view: 'account' }); }
     if (e.target.closest('[data-read]')) {
       const r = await attempt(() => api('/api/notifications/read', { method: 'POST', body: { ids: 'all' } }));
-      if (r) { state.unread = r.unread; renderActions(); closePanel(); }
+      if (r) { state.unread = r.unread; renderActions(); closePanel({ restore: true }); }
       return;
     }
     const n = e.target.closest('.notif');
@@ -465,9 +468,9 @@ function renderToolbar() {
     return;
   }
   bar.innerHTML = `
-    <div class="tabs" role="tablist">
-      ${TABS.filter(([v]) => v !== 'mapa' || p?.path).map(([v, label, icon]) => `<button role="tab" class="tab ${state.view === v ? 'on' : ''}" data-view="${v}" aria-selected="${state.view === v}">${icon}<span>${t(label)}</span></button>`).join('')}
-    </div>
+    <nav class="tabs" aria-label="${esc(t('Visões'))}">
+      ${TABS.filter(([v]) => v !== 'mapa' || p?.path).map(([v, label, icon]) => `<button class="tab ${state.view === v ? 'on' : ''}" data-view="${v}" ${state.view === v ? 'aria-current="page"' : ''}>${icon}<span>${t(label)}</span></button>`).join('')}
+    </nav>
     <span class="spacer"></span>
     ${p && taskView ? `
       <div class="sprint-box">
@@ -480,9 +483,10 @@ function renderToolbar() {
         <button class="icon-btn tiny" data-action="sprints" title="${esc(t('Gerenciar sprints'))}" aria-label="${esc(t('Gerenciar sprints'))}">${ICON.gear}</button>
       </div>` : ''}
     ${taskView ? `
-      <label class="search">${ICON.search}<input id="search" type="search" placeholder="${esc(t('Filtrar'))}" value="${esc(state.q)}" autocomplete="off"><kbd>/</kbd></label>
+      <label class="search">${ICON.search}<input id="search" type="search" placeholder="${esc(t('Filtrar'))}" aria-label="${esc(t('Filtrar'))}" value="${esc(state.q)}" autocomplete="off">${singleKeys() ? '<kbd>/</kbd>' : ''}</label>
       ${filterChips()}
-      <button class="btn ghost bordered ${n ? 'active' : ''}" data-action="filters">${ICON.filter}${t('Filtros')}<span class="count">${n || ''}</span></button>` : ''}`;
+      <button class="btn ghost bordered ${n ? 'active' : ''}" data-action="filters" aria-haspopup="dialog" aria-expanded="false">${ICON.filter}${t('Filtros')}<span class="count">${n || ''}</span></button>` : ''}`;
+  keepPanelAnchorExpanded();
 }
 
 // Filtros ativos à vista, cada um com um × para tirar.
@@ -512,15 +516,10 @@ function sinceText(iso) {
   return t('{data} às {hora}', { data: d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' }), hora: time });
 }
 
-function newInScope() {
-  const scope = scopedProjectIds();
-  return state.tasks.filter((x) => isNew(x) && !x.parent_id && (!state.projectId || x.project_id === state.projectId) && (!scope || scope.has(x.project_id)));
-}
-
 function renderSince() {
   const el = $('#since-bar');
   const dismissed = (() => { try { return sessionStorage.getItem('tk_since_dismissed') === since; } catch { return false; } })();
-  const list = since && state.loaded && TASK_VIEWS.includes(state.view) && !dismissed ? newInScope() : [];
+  const list = since && state.loaded && TASK_VIEWS.includes(state.view) && !dismissed ? newTasks() : [];
   if (!list.length && !state.onlyNew) { el.hidden = true; el.innerHTML = ''; return; }
   const claude = list.filter((x) => x.source === 'claude').length;
   const projects = new Set(list.map((x) => x.project_id)).size;
@@ -534,6 +533,7 @@ function renderSince() {
     <div class="since-bar" role="status">
       <span class="ember" aria-hidden="true">${ICON.sparkles}</span>
       <span class="since-text"><b>${esc(tn(list.length, '{n} tarefa nova', '{n} tarefas novas'))}</b> <span class="muted">${esc(details)}</span></span>
+      ${triageable().length && list.length ? `<button class="btn primary small" data-since="triage">${t('Revisar as novas')}</button>` : ''}
       <button class="btn ghost bordered small" data-since="only">${state.onlyNew ? t('Ver todas') : t('Ver só as novas')}</button>
       ${list.length ? `<button class="btn ghost small" data-since="seen">${t('Marcar como vistas')}</button>` : ''}
       <button class="icon-btn small" data-since="close" aria-label="${esc(t('Dispensar'))}">${ICON.close}</button>
@@ -544,8 +544,9 @@ function onSinceClick(e) {
   const b = e.target.closest('[data-since]');
   if (!b) return;
   const action = b.dataset.since;
+  if (action === 'triage') return openTriage();
   if (action === 'only') state.onlyNew = !state.onlyNew;
-  if (action === 'seen') { state.onlyNew = false; markSeen(newInScope().map((x) => x.id)); }
+  if (action === 'seen') { state.onlyNew = false; markSeen(newTasks().map((x) => x.id)); }
   if (action === 'close') {
     try { sessionStorage.setItem('tk_since_dismissed', since); } catch {}
     state.onlyNew = false;
@@ -568,6 +569,7 @@ function onToolbarClick(e) {
 }
 
 function showFilters(anchor) {
+  if (panelOpenFrom(anchor)) return closePanel({ restore: true });
   const sel = (name, options, value) => `<select class="input" name="${name}">${options.map(([v, l]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   const people = [['', t('Qualquer pessoa')], ...(state.me ? [['me', t('Eu')]] : []), ['none', t('Sem responsável')], ...state.users.filter((u) => u.id !== state.me?.id).map((u) => [String(u.id), u.name])];
   const tags = [...new Set(state.tasks.flatMap((x) => x.tags))].sort((a, b) => a.localeCompare(b));
@@ -594,38 +596,85 @@ function showFilters(anchor) {
     Object.assign(state, { prio: '', type: '', assignee: '', due: '', tag: '', showSubtasks: false });
     const reload = state.showArchived;
     state.showArchived = false;
-    closePanel();
+    closePanel({ restore: true });
     if (reload) load(); else emit('filter');
   };
 }
 
 // ---------- painel flutuante genérico ----------
+// Um diálogo leve, não modal: abre com o foco dentro, Esc e Tab na ponta fecham e devolvem o foco ao botão.
 
+const PANEL_FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]';
 let panelEl = null;
+let panelAnchor = null;
 export function floatingPanel(anchor, html, { width = 300, align = 'left' } = {}) {
   closePanel();
   panelEl = document.createElement('div');
   panelEl.className = 'float-panel';
+  panelEl.setAttribute('role', 'dialog');
+  panelEl.tabIndex = -1;
   panelEl.style.width = `${Math.min(width, innerWidth - 16)}px`;
   panelEl.innerHTML = html;
+  const name = panelEl.querySelector('.panel-head b')?.textContent;
+  if (name) panelEl.setAttribute('aria-label', name);
   document.body.append(panelEl);
   const r = anchor.getBoundingClientRect();
   const w = panelEl.offsetWidth;
   let left = align === 'right' ? r.right - w : r.left;
   if (left + w > innerWidth - 8) left = innerWidth - w - 8;
   Object.assign(panelEl.style, { left: `${Math.max(8, left)}px`, top: `${r.bottom + 6}px` });
+  panelAnchor = anchor;
+  anchor.setAttribute('aria-haspopup', 'dialog');
+  anchor.setAttribute('aria-expanded', 'true');
+  panelEl.addEventListener('keydown', onPanelKey);
+  (panelEl.querySelector(PANEL_FOCUSABLE) || panelEl).focus();
   setTimeout(() => document.addEventListener('pointerdown', outsidePanel, true));
   return panelEl;
 }
 
-function outsidePanel(e) {
-  if (panelEl && !panelEl.contains(e.target) && !e.target.closest('.menu-pop')) closePanel();
+function onPanelKey(e) {
+  // As teclas ficam com o painel: os atalhos de uma tecla do painel não valem aqui dentro.
+  e.stopPropagation();
+  if (e.key !== 'Tab') return;
+  const all = [...panelEl.querySelectorAll(PANEL_FOCUSABLE)];
+  const edge = e.shiftKey ? all[0] : all.at(-1);
+  if (document.activeElement === edge || document.activeElement === panelEl) {
+    e.preventDefault();
+    closePanel({ restore: true });
+  }
 }
 
-export function closePanel() {
+// O botão que abriu o painel pode ter sido redesenhado enquanto ele estava aberto.
+function currentPanelAnchor() {
+  if (panelAnchor?.isConnected) return panelAnchor;
+  const action = panelAnchor?.dataset.action;
+  return action ? document.querySelector(`[data-action="${action}"]`) : null;
+}
+
+function keepPanelAnchorExpanded() {
+  const anchor = currentPanelAnchor();
+  if (!anchor) return;
+  panelAnchor = anchor;
+  anchor.setAttribute('aria-expanded', 'true');
+}
+
+// Clicar de novo no botão que abriu o painel fecha o painel.
+const panelOpenFrom = (anchor) => panelEl && currentPanelAnchor() === anchor;
+
+function outsidePanel(e) {
+  if (!panelEl || panelEl.contains(e.target) || e.target.closest('.menu-pop') || currentPanelAnchor()?.contains(e.target)) return;
+  closePanel();
+}
+
+export function closePanel({ restore = false } = {}) {
+  const anchor = currentPanelAnchor();
   panelEl?.remove();
   panelEl = null;
+  panelAnchor = null;
   document.removeEventListener('pointerdown', outsidePanel, true);
+  if (!anchor) return;
+  anchor.setAttribute('aria-expanded', 'false');
+  if (restore) anchor.focus();
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && panelEl) { e.stopPropagation(); closePanel(); } }, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && panelEl) { e.stopPropagation(); closePanel({ restore: true }); } }, true);

@@ -2,8 +2,8 @@
 // labels, pessoas e workspaces, e atalhos para as páginas e ações do painel.
 import { api } from './api.js';
 import { openTask } from './drawer.js';
-import { t } from './i18n.js';
-import { TASK_VIEWS, can, isAdmin, navigate, state } from './state.js';
+import { t, tn } from './i18n.js';
+import { TASK_VIEWS, can, isAdmin, navigate, singleKeys, state, triageable } from './state.js';
 import { ICON, avatar, debounce, esc, projectBadge, statusIcon, taskRef } from './util.js';
 
 let dialog = null;
@@ -12,6 +12,7 @@ function commands() {
   const go = (view, extra = {}) => () => navigate({ view, ...extra });
   const list = [
     { label: t('Nova tarefa'), icon: ICON.plus, hint: 'N', run: () => import('./taskform.js').then((m) => m.openNewTask()), when: state.me?.role !== 'viewer' && (!state.projectId || can(state.projectId, 'edit')) },
+    { label: t('Revisar as novas'), icon: ICON.sparkles, run: () => import('./triage.js').then((m) => m.openTriage()), when: triageable().length > 0 },
     { label: t('Novo projeto'), icon: ICON.folder, run: () => import('./shell.js').then((m) => m.newProject()), when: state.me?.role !== 'viewer' },
     { label: t('Chat com o Claude'), icon: ICON.sparkles, hint: 'C', run: () => import('./chat.js').then((m) => m.toggleChat()), when: state.me?.role !== 'viewer' },
     { label: t('Todas as tarefas'), icon: ICON.grid, run: go(TASK_VIEWS.includes(state.view) ? state.view : 'board', { projectId: null, workspaceId: null, assignee: '' }) },
@@ -43,12 +44,15 @@ function localMatches(q) {
   return { cmds, projects };
 }
 
+let seq = 0;
 function section(title, rows) {
-  return rows.length ? `<div class="pal-section">${esc(title)}</div>${rows.join('')}` : '';
+  if (!rows.length) return '';
+  const id = `pal-sec-${++seq}`;
+  return `<div role="group" aria-labelledby="${id}"><div class="pal-section" id="${id}">${esc(title)}</div>${rows.join('')}</div>`;
 }
 
 function row(kind, id, icon, label, hint = '', extra = '') {
-  return `<button class="pal-item" data-kind="${kind}" data-id="${esc(id)}" ${extra}>
+  return `<button type="button" class="pal-item" role="option" tabindex="-1" aria-selected="false" id="pal-opt-${++seq}" data-kind="${kind}" data-id="${esc(id)}" ${extra}>
     <span class="pal-icon">${icon}</span><span class="pal-label">${label}</span>${hint ? `<span class="pal-hint">${hint}</span>` : ''}
   </button>`;
 }
@@ -65,12 +69,27 @@ function render(results, q) {
     section(t('Labels'), (r.labels || []).map((l) => row('label', l.name, `<span class="dot" style="--c:${esc(l.color || 'var(--text-3)')}"></span>`, esc(l.name), '', `data-project="${l.project_id || ''}"`))),
     section(t('Pessoas'), (r.people || []).map((u) => row('person', u.id, avatar(u, { size: 18 }), esc(u.name), esc(u.email)))),
     section(t('Workspaces'), (r.workspaces || []).map((w) => row('workspace', w.id, ICON.layers, esc(w.name)))),
-    section(t('Ações e páginas'), cmds.map((c, i) => row('cmd', i, c.icon, esc(c.label), c.hint ? `<kbd>${esc(c.hint)}</kbd>` : ''))),
+    section(t('Ações e páginas'), cmds.map((c, i) => row('cmd', i, c.icon, esc(c.label), c.hint && singleKeys() ? `<kbd>${esc(c.hint)}</kbd>` : ''))),
   ].join('');
   const list = dialog.querySelector('.pal-list');
   list.innerHTML = html || `<div class="pal-empty">${esc(t('Nada encontrado para “{q}”', { q }))}</div>`;
-  list.querySelector('.pal-item')?.classList.add('on');
+  setActive(list.querySelector('.pal-item'));
   list._cmds = cmds;
+  const count = list.querySelectorAll('.pal-item').length;
+  dialog.querySelector('input').setAttribute('aria-expanded', String(count > 0));
+  dialog.querySelector('.pal-status').textContent = q.trim() ? tn(count, '{n} resultado', '{n} resultados') : '';
+}
+
+// A opção ativa é só uma marca: o foco fica no campo, e o leitor de tela acompanha pelo aria-activedescendant.
+function setActive(item) {
+  const on = dialog.querySelector('.pal-item.on');
+  on?.classList.remove('on');
+  on?.setAttribute('aria-selected', 'false');
+  const input = dialog.querySelector('input');
+  if (!item) return input.removeAttribute('aria-activedescendant');
+  item.classList.add('on');
+  item.setAttribute('aria-selected', 'true');
+  input.setAttribute('aria-activedescendant', item.id);
 }
 
 function choose(item) {
@@ -95,9 +114,8 @@ function move(delta) {
   const items = [...dialog.querySelectorAll('.pal-item')];
   if (!items.length) return;
   const i = items.findIndex((x) => x.classList.contains('on'));
-  items[i]?.classList.remove('on');
   const next = items[(i + delta + items.length) % items.length];
-  next.classList.add('on');
+  setActive(next);
   next.scrollIntoView({ block: 'nearest' });
 }
 
@@ -111,18 +129,21 @@ export function openPalette() {
   if (dialog) return dialog.querySelector('input').focus();
   dialog = document.createElement('dialog');
   dialog.className = 'palette';
+  dialog.setAttribute('aria-label', t('Paleta de comandos'));
+  const hint = t('Buscar tarefas, projetos, pessoas… ou digite um comando');
   dialog.innerHTML = `
     <div class="pal-box">
-      <label class="pal-search">${ICON.search}<input type="search" placeholder="${esc(t('Buscar tarefas, projetos, pessoas… ou digite um comando'))}" autocomplete="off" spellcheck="false"><kbd>esc</kbd></label>
-      <div class="pal-list" role="listbox"></div>
+      <label class="pal-search">${ICON.search}<input type="search" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" aria-label="${esc(hint)}" placeholder="${esc(hint)}" autocomplete="off" spellcheck="false"><kbd>esc</kbd></label>
+      <div class="pal-list" id="pal-list" role="listbox" aria-label="${esc(t('Resultados'))}"></div>
+      <div class="sr-only pal-status" role="status"></div>
     </div>`;
   document.body.append(dialog);
   const input = dialog.querySelector('input');
-  let seq = 0;
+  let latest = 0;
   const search = debounce(async (q) => {
-    const mine = ++seq;
+    const mine = ++latest;
     const results = q.trim().length >= 2 ? await api(`/api/search?q=${encodeURIComponent(q.trim())}`).catch(() => null) : null;
-    if (dialog && mine === seq) render(results, q);
+    if (dialog && mine === latest) render(results, q);
   }, 140);
   input.oninput = () => { render(null, input.value); search(input.value); };
   dialog.onkeydown = (e) => {
@@ -144,8 +165,7 @@ export function openPalette() {
   dialog.onmousemove = (e) => {
     const item = e.target.closest('.pal-item');
     if (!item || item.classList.contains('on')) return;
-    dialog.querySelector('.pal-item.on')?.classList.remove('on');
-    item.classList.add('on');
+    setActive(item);
   };
   dialog.addEventListener('cancel', (e) => { e.preventDefault(); closePalette(); });
   dialog.showModal();

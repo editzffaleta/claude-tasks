@@ -1,7 +1,7 @@
 // Páginas Equipe (membros, papéis e convites) e Minha conta (perfil, senha e preferências).
 import { api, attempt, pickFile, toast, uploadTo } from './api.js';
 import { LANGUAGES, t } from './i18n.js';
-import { load, state } from './state.js';
+import { emit, load, state } from './state.js';
 import { swatches } from './shell.js';
 import { confirmAction, openDialog } from './ui.js';
 import { ICON, ROLES, ROLE_LABEL, USER_ROLE_LABEL, ago, applyTheme, avatar, esc, fmtDate } from './util.js';
@@ -161,6 +161,10 @@ export async function renderAccount(el) {
             <label class="field"><span>${t('Tema')}</span>${sel('theme', translated(THEMES), prefs.theme)}</label>
             <label class="field"><span>${t('Abrir em')}</span>${sel('default_view', translated(VIEWS), prefs.default_view)}</label>
           </div>
+          <div class="field">
+            <label class="check"><input type="checkbox" name="single_keys" ${prefs.single_keys !== false ? 'checked' : ''}><span>${t('Atalhos de uma tecla (N, C, K, / e 1 a 5)')}</span></label>
+            <p class="hint">${t('Desligue se você usa comandos de voz ou se as teclas disparam ações sem querer. ⌘K continua funcionando.')}</p>
+          </div>
           <div class="field"><span>${t('Notificações')}</span>
             <div class="table-wrap"><table class="mini-table notify-matrix">
               <thead><tr><th></th>${Object.values(channels).map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
@@ -218,12 +222,14 @@ export async function renderAccount(el) {
       }
       const before = prefs.language;
       const saved = await attempt(() => api('/api/me/settings', {
-        method: 'PATCH', body: { language: f.language.value || null, theme: f.theme.value, default_view: f.default_view.value, notify },
+        method: 'PATCH', body: { language: f.language.value || null, theme: f.theme.value, default_view: f.default_view.value, single_keys: f.single_keys.checked, notify },
       }), t('Preferências salvas'));
       if (!saved) return;
       state.prefs = saved;
       applyTheme(saved.theme);
       if ((saved.language || '') !== (before || '')) location.reload();
+      // Redesenha a estrutura, que mostra ou esconde as dicas de atalho.
+      emit('prefs');
     }
   };
 }

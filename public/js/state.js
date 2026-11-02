@@ -81,6 +81,17 @@ export function markSeen(ids) {
   emit('seen');
 }
 
+// As novas no escopo aberto (projeto ou workspace), sem subtarefas.
+export function newTasks() {
+  const scope = scopedProjectIds();
+  return state.tasks.filter((t) => isNew(t) && !t.parent_id && (!state.projectId || t.project_id === state.projectId) && (!scope || scope.has(t.project_id)));
+}
+// O que a triagem guiada mostra: as novas que esta pessoa pode editar, da mais antiga para a mais recente.
+export const triageable = () => newTasks().filter((t) => can(t.project_id, 'edit')).sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+// Atalhos de uma tecla só (N, C, K, / e 1 a 5): ligados, a menos que a pessoa os desligue nas preferências.
+export const singleKeys = () => state.prefs?.single_keys !== false;
+
 const listeners = new Set();
 export const subscribe = (fn) => listeners.add(fn);
 export const emit = (what = 'all') => listeners.forEach((fn) => fn(what));

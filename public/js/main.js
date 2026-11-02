@@ -10,7 +10,7 @@ import { pickLanguage, setLanguage, t } from './i18n.js';
 import { renderList } from './list.js';
 import { openPalette } from './palette.js';
 import { mountShell, renderShell, toggleSidebar } from './shell.js';
-import { PAGES, TASK_VIEWS, load, navigate, onUiCommand, startLive, state, subscribe } from './state.js';
+import { PAGES, TASK_VIEWS, load, navigate, onUiCommand, singleKeys, startLive, state, subscribe } from './state.js';
 import { openNewTask } from './taskform.js';
 import { $, applyTheme } from './util.js';
 
@@ -85,7 +85,7 @@ document.addEventListener('keydown', (e) => {
     if (state.taskId) return closeDrawer();
     return toggleSidebar(false);
   }
-  if (isTyping() || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (isTyping() || e.metaKey || e.ctrlKey || e.altKey || !singleKeys()) return;
   const key = e.key.toLowerCase();
   if (key === '/') {
     const search = $('#search');

@@ -447,7 +447,7 @@ function render() {
       <span class="spacer"></span>
       <button class="icon-btn small ${watching ? 'on' : ''}" data-action="watch" aria-pressed="${!!watching}" aria-label="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}" title="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}">${ICON.eye}</button>
       <button class="icon-btn small" data-action="copy" aria-label="${esc(t('Copiar pedido para colar numa sessão do Claude'))}" title="${esc(t('Copiar pedido para colar numa sessão do Claude'))}">${ICON.copy}</button>
-      <button class="icon-btn small" data-action="more" aria-label="${esc(t('Mais ações'))}" title="${esc(t('Mais ações'))}">${ICON.more}</button>
+      <button class="icon-btn small" data-action="more" aria-label="${esc(t('Mais ações'))}" title="${esc(t('Mais ações'))}" aria-haspopup="menu" aria-expanded="false">${ICON.more}</button>
       <button class="icon-btn small" data-action="close" aria-label="${esc(t('Fechar (Esc)'))}" title="${esc(t('Fechar (Esc)'))}">${ICON.close}</button>
     </div>
     <textarea class="title-edit" id="d-title" rows="1" maxlength="300" aria-label="${esc(t('Título'))}" ${canEdit ? '' : 'readonly'}>${esc(x.title)}</textarea>

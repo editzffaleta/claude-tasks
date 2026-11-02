@@ -101,7 +101,7 @@ function suggestMentions(el) {
       el.focus();
       el.dispatchEvent(new Event('input', { bubbles: true }));
     },
-  })));
+  })), { keepFocus: true });
 }
 
 // Liga a barra e os atalhos dentro de um container (o painel da tarefa usa delegação).

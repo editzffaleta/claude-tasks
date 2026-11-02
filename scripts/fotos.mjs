@@ -77,6 +77,7 @@ const README = [
   { name: 'gantt', url: '/?project=1&view=gantt', wait: 1800 },
   { name: 'dashboard', url: '/?view=dashboard', wait: 2500 },
   { name: 'tarefa', url: '/?project=1&task=2', wait: 2000 },
+  { name: 'triagem', url: '/?project=1', wait: 1500, prepare: async () => { await run("document.querySelector('[data-since=\"triage\"]').click(); await new Promise((r) => setTimeout(r, 800));"); } },
   { name: 'mapa', url: '/?project=4&view=mapa', wait: 6000 },
   { name: 'simulacao', url: '/?project=4&view=mapa', wait: 4000, prepare: async () => { await run("document.querySelector('[data-modo=\"sim\"]').click(); await new Promise((r) => setTimeout(r, 1500));"); } },
 ];

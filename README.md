@@ -114,8 +114,17 @@ API compatível com a da OpenAI (OpenRouter, Ollama e outras).
 ### O que é novo e o que o Claude fez, à vista
 
 - **Novidades desde a sua última visita:** uma faixa no topo resume "5 tarefas novas desde ontem às 18:40 · 3
-  registradas pelo Claude", com **Ver só as novas** e **Marcar como vistas**. Os cartões novos ganham uma brasa na
-  borda e o selo **Nova** até você abri-los.
+  registradas pelo Claude", com **Revisar as novas**, **Ver só as novas** e **Marcar como vistas**. Os cartões novos
+  ganham uma brasa na borda e o selo **Nova** até você abri-los.
+- **Triagem guiada:** **Revisar as novas** mostra uma tarefa por vez, com contador. Dá para decidir tudo pelo teclado:
+  `1` a `5` para a prioridade, `I` para atribuir a você, `S` para a sprint ativa, `D` para o prazo, `Enter` para aceitar,
+  `→` para pular e `Backspace` para arquivar. Termina em "Triagem zerada".
+
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/triagem-escuro.webp" />
+    <img src="docs/imagens/triagem-claro.webp" alt="Triagem guiada: uma tarefa registrada pelo Claude, com botões de prioridade, responsável, sprint e prazo, e as ações Arquivar, Pular e Aceitar" width="100%" />
+  </picture>
+
 - **O Claude como colega de equipe:** o que ele registrou aparece com "✳ Claude" no cartão e "Registrada pelo
   Claude" no detalhe.
 - **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o cartão acende
@@ -487,6 +496,9 @@ Cloudflare Tunnel.
 | `Shift` + setas | No quadro, levar o cartão para outra coluna ou posição |
 | `Enter` | Abrir o cartão focado |
 | `Esc` | Fechar o painel ou o diálogo aberto |
+
+Os atalhos de uma tecla podem ser desligados em **Minha conta → Preferências**. Os menus também funcionam pelo teclado
+(setas, `Home`, `End` e a inicial do item), e a triagem guiada tem atalhos próprios.
 
 ## Dados, backup e privacidade
 
