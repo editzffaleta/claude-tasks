@@ -65,7 +65,7 @@ async function renderView(reason) {
 
 subscribe((what) => {
   renderShell();
-  if (what !== 'unread') renderView(what);
+  if (what !== 'unread' && what !== 'live') renderView(what);
 });
 
 function isTyping() {

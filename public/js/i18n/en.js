@@ -720,6 +720,7 @@ export default {
   'Dashboard': 'Dashboard',
   'Configurações do projeto': 'Project settings',
   'Administração': 'Administration',
+  'Gerenciar': 'Manage',
   'Minha conta e preferências': 'My account and preferences',
   'Sprints': 'Sprints',
   'Ações e páginas': 'Actions and pages',
