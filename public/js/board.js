@@ -2,7 +2,7 @@
 import { api, toast } from './api.js';
 import { openTask } from './drawer.js';
 import { t, tn } from './i18n.js';
-import { state, filteredTasks, load, userById, currentProject, can, canWrite, labelFor } from './state.js';
+import { state, filteredTasks, load, userById, currentProject, can, canWrite, labelFor, isNew } from './state.js';
 import { openNewTask } from './taskform.js';
 import {
   $, $$, COLUMN_LABEL, ICON, STATUSES, avatar, columnLabel, dueInfo, esc, fmtDuration, fmtNumber, prioIcon, projectBadge, statusIcon, taskRef, typeIcon,
@@ -36,7 +36,9 @@ export function cardHtml(x, { showProject = !state.projectId } = {}) {
   const due = dueInfo(x, state.today);
   const people = x.assignee_ids.map(userById).filter(Boolean);
   const spent = x.spent_minutes || 0;
-  const classes = ['card', x.status === 'done' && 'done', x.id === state.taskId && 'selected', x.archived_at && 'archived'].filter(Boolean).join(' ');
+  const fresh = isNew(x);
+  const classes = ['card', x.status === 'done' && 'done', x.id === state.taskId && 'selected', x.archived_at && 'archived', fresh && 'is-new', state.fresh.has(x.id) && 'fresh'].filter(Boolean).join(' ');
+  const shownTags = x.tags.slice(0, 2);
   const project = { name: x.project_name, color: x.project_color, avatar: state.projects.find((p) => p.id === x.project_id)?.avatar };
   return `
     <article class="${classes}" draggable="${can(x.project_id, 'edit')}" data-id="${x.id}" tabindex="0">
@@ -46,9 +48,10 @@ export function cardHtml(x, { showProject = !state.projectId } = {}) {
         ${x.timer_running ? `<span class="flag timer" title="${esc(t('Timer rodando'))}">${ICON.clock}</span>` : ''}
         ${x.recurrence ? `<span class="flag" title="${esc(t('Recorrente'))}">${ICON.repeat}</span>` : ''}
         <span class="spacer"></span>
-        ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Criada pelo Claude'))}">${ICON.claude}</span>` : ''}
+        ${fresh ? `<span class="new-pill" title="${esc(t('Criada depois da sua última visita'))}">${t('Nova')}</span>` : ''}
+        ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Criada pelo Claude'))}">${ICON.claude}${t('Claude')}</span>` : ''}
         ${x.source === 'e-mail' ? `<span class="by" title="${esc(t('Criada por e-mail'))}">${ICON.mail}</span>` : ''}
-        ${people.length ? `<span class="avatars">${people.slice(0, 3).map((u) => avatar(u, { size: 18 })).join('')}</span>` : ''}
+        ${people.length ? `<span class="avatars">${people.slice(0, 2).map((u) => avatar(u, { size: 20 })).join('')}${people.length > 2 ? `<span class="more-people" title="${esc(people.slice(2).map((u) => u.name).join(', '))}">+${people.length - 2}</span>` : ''}</span>` : ''}
       </div>
       ${x.parent_id ? `<div class="parent-ref">${ICON.subtask}${esc(x.parent_title || `#${x.parent_id}`)}</div>` : ''}
       <h3>${esc(x.title)}</h3>
@@ -56,7 +59,8 @@ export function cardHtml(x, { showProject = !state.projectId } = {}) {
         ${showProject ? `<span class="chip">${projectBadge(project)}${esc(x.project_name)}</span>` : ''}
         ${due ? `<span class="chip due ${due.cls}" title="${esc(due.title)}">${ICON.calendar}${due.text}</span>` : ''}
         ${x.story_points != null ? `<span class="chip points" title="${esc(t('Story points'))}">${fmtNumber(x.story_points)} ${t('pts')}</span>` : ''}
-        ${x.tags.map((tag) => tagChip(tag, x.project_id)).join('')}
+        ${shownTags.map((tag) => tagChip(tag, x.project_id)).join('')}${x.tags.length > 2 ? `<span class="more-tags" title="${esc(x.tags.slice(2).join(', '))}">+${x.tags.length - 2}</span>` : ''}
+        ${x.archived_at ? `<span class="chip">${ICON.archive}${t('arquivada')}</span>` : ''}
         ${x.subtask_count ? `<span class="meta-icon ${x.subtask_done === x.subtask_count ? 'complete' : ''}" title="${esc(t('Subtarefas'))}">${ICON.subtask}${x.subtask_done}/${x.subtask_count}</span>` : ''}
         ${x.note_count ? `<span class="meta-icon" title="${esc(t('Comentários'))}">${ICON.comment}${x.note_count}</span>` : ''}
         ${x.attachment_count ? `<span class="meta-icon" title="${esc(t('Anexos'))}">${ICON.clip}${x.attachment_count}</span>` : ''}
@@ -92,6 +96,8 @@ export function renderBoard(el) {
   const filtered = state.q || state.prio || state.type || state.assignee || state.due || state.tag;
   const writer = canWrite();
 
+  // O foco do teclado sobrevive às atualizações ao vivo (o quadro é redesenhado inteiro).
+  const focusedId = document.activeElement?.closest?.('.card')?.dataset.id;
   const scroll = Object.fromEntries($$('.column', el).map((c) => [c.dataset.key, $('.cards', c).scrollTop]));
   const scrollLeft = $('.board', el)?.scrollLeft || 0;
   const first = !$('.board', el);
@@ -112,6 +118,7 @@ export function renderBoard(el) {
     </div>`;
   $$('.column', el).forEach((c) => { $('.cards', c).scrollTop = scroll[c.dataset.key] || 0; });
   $('.board', el).scrollLeft = scrollLeft;
+  if (focusedId) $(`.card[data-id="${focusedId}"]`, el)?.focus({ preventScroll: true });
 
   el.onclick = (e) => {
     const add = e.target.closest('[data-add]');
@@ -122,9 +129,33 @@ export function renderBoard(el) {
     const card = e.target.closest('.card');
     if (card) openTask(Number(card.dataset.id));
   };
+  // Teclado: setas andam entre os cartões; Shift + setas levam o cartão junto (outra coluna ou posição).
   el.onkeydown = (e) => {
     const card = e.target.closest('.card');
-    if (card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTask(Number(card.dataset.id)); }
+    if (!card) return;
+    const id = Number(card.dataset.id);
+    if (e.key === 'Enter' || (e.key === ' ' && !e.shiftKey)) { e.preventDefault(); return openTask(id); }
+    const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (!dir || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    const columns = $$('.column', el);
+    const ci = columns.findIndex((c) => c.contains(card));
+    const ri = $$('.card', columns[ci]).indexOf(card);
+    const target = columns[ci + dir[0]];
+    if (!e.shiftKey) {
+      const list = target ? $$('.card', target) : [];
+      const next = dir[0] ? list[Math.min(ri, list.length - 1)] : $$('.card', columns[ci])[ri + dir[1]];
+      return next?.focus();
+    }
+    const task = state.tasks.find((x) => x.id === id);
+    if (!task || !can(task.project_id, 'edit') || !target) return;
+    const col = cols.find((c) => c.key === target.dataset.key);
+    const allowed = allowedTargets(task, cols);
+    if (allowed && !allowed.has(col.key)) return toast(t('Essa mudança de coluna não é permitida no fluxo do projeto'), true);
+    const list = buckets[col.key];
+    const index = dir[0] ? Math.min(ri, list.length) : ri + dir[1];
+    moveCard(el, id, cols, col, list, Math.max(0, index));
+    requestAnimationFrame(() => $(`.card[data-id="${id}"]`, el)?.focus());
   };
   el.ondragstart = (e) => {
     const card = e.target.closest('.card');
@@ -212,13 +243,20 @@ async function moveCard(el, id, cols, col, list, index) {
   }
   if (!Object.keys(patch).length) return renderBoard(el);
 
+  const before = { column: task.column_id ?? task.status, status: task.status, rank: task.sort_rank };
   Object.assign(task, { status: col.status, column_id: state.projectId && typeof col.ref === 'number' ? col.ref : null });
   if (patch.rank !== undefined) task.sort_rank = patch.rank;
   state.tasks.sort((a, b) => a.sort_rank - b.sort_rank);
   renderBoard(el);
   try {
     await api(`/api/tasks/${id}`, { method: 'PATCH', body: patch });
-    if (patch.status === 'done' || col.status === 'done') toast(t('{ref} concluída', { ref: taskRef(task) }));
+    // Mudou de coluna: avisa (os leitores de tela também ouvem) e deixa desfazer.
+    if (!sameColumn) {
+      const undo = { ...('column' in patch ? { column: before.column } : {}), ...('status' in patch ? { status: before.status } : {}), ...(patch.rank !== undefined ? { rank: before.rank } : {}) };
+      toast(col.status === 'done' ? t('{ref} concluída', { ref: taskRef(task) }) : t('{ref} movida para {coluna}', { ref: taskRef(task), coluna: col.name }), {
+        action: { label: t('Desfazer'), run: () => api(`/api/tasks/${id}`, { method: 'PATCH', body: undo }).then(load, (err) => toast(err.message, true)) },
+      });
+    }
   } catch (e) {
     toast(e.message, true);
   }

@@ -1,9 +1,12 @@
-// Diálogo de nova tarefa com todos os campos.
-import { api, attempt } from './api.js';
+// Diálogo de nova tarefa: título, descrição e o essencial à vista; o resto em "Mais campos".
+import { api, attempt, toast } from './api.js';
 import { t } from './i18n.js';
 import { can, load, state } from './state.js';
 import { openDialog } from './ui.js';
-import { $, FREQS, FREQ_LABEL, PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, avatar, columnLabel, esc } from './util.js';
+import { $, FREQS, FREQ_LABEL, ICON, PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, avatar, columnLabel, esc } from './util.js';
+
+// "Mais campos" fica aberto ou fechado como a pessoa deixou da última vez.
+let moreOpen = (() => { try { return localStorage.getItem('tk_more_fields') === '1'; } catch { return false; } })();
 
 export function openNewTask(preset = {}) {
   const projects = state.projects.filter((p) => !p.archived_at && can(p, 'edit'));
@@ -17,41 +20,44 @@ export function openNewTask(preset = {}) {
     wide: true,
     footer: `<span class="hint">${t('{k} para criar', { k: '<kbd>⌘</kbd><kbd>↵</kbd>' })}</span>`,
     body: `
-      <input name="title" class="input title-input" placeholder="${esc(t('O que precisa ser feito?'))}" required maxlength="300" autocomplete="off">
-      <textarea name="description" class="input" rows="4" placeholder="${esc(t('Contexto, arquivos envolvidos, critérios de pronto… (Markdown)'))}"></textarea>
-      <div class="field-row">
-        <label class="field"><span>${t('Projeto')}</span>
-          <select name="project_id" class="input">${projects.map((p) => opt(p.id, p.name, projectId)).join('')}${opt('new', t('+ Novo projeto…'), projectId)}</select>
-        </label>
+      <div class="capture">
+        <input name="title" class="input title-input" placeholder="${esc(t('O que precisa ser feito?'))}" aria-label="${esc(t('Título'))}" required maxlength="300" autocomplete="off">
+        <textarea name="description" class="input" rows="3" aria-label="${esc(t('Descrição'))}" placeholder="${esc(t('Contexto, arquivos envolvidos, critérios de pronto… (Markdown)'))}"></textarea>
+        <div class="essentials">
+          <label class="field"><span>${t('Projeto')}</span>
+            <select name="project_id" class="input">${projects.map((p) => opt(p.id, p.name, projectId)).join('')}${opt('new', t('+ Novo projeto…'), projectId)}</select>
+          </label>
+          <label class="field"><span>${t('Status')}</span><select name="column" class="input"></select></label>
+          <label class="field"><span>${t('Prioridade')}</span>
+            <select name="priority" class="input">${PRIORITIES.map((p) => opt(p, PRIORITY_LABEL[p], preset.priority || 'medium')).join('')}</select>
+          </label>
+          <label class="field"><span>${t('Prazo')}</span><input type="date" name="due_date" class="input" value="${preset.due_date || ''}"></label>
+        </div>
         <label class="field" data-newproject hidden><span>${t('Nome do projeto')}</span><input name="project_name" class="input" maxlength="120" placeholder="${esc(t('ex.: Pessoal'))}"></label>
-        <label class="field"><span>${t('Status')}</span><select name="column" class="input"></select></label>
-        <label class="field"><span>${t('Prioridade')}</span>
-          <select name="priority" class="input">${PRIORITIES.map((p) => opt(p, PRIORITY_LABEL[p], preset.priority || 'medium')).join('')}</select>
-        </label>
-        <label class="field"><span>${t('Tipo')}</span>
-          <select name="type" class="input">${TYPES.map((x) => opt(x, TYPE_LABEL[x], preset.type || 'task')).join('')}</select>
-        </label>
-      </div>
-      <div class="field-row">
-        <label class="field"><span>${t('Início')}</span><input type="date" name="start_date" class="input" value="${preset.start_date || ''}"></label>
-        <label class="field"><span>${t('Prazo')}</span><input type="date" name="due_date" class="input" value="${preset.due_date || ''}"></label>
-        <label class="field"><span>${t('Estimativa')}</span><input name="estimate" class="input" placeholder="${esc(t('2h, 1h30m, 1d'))}"></label>
-        <label class="field"><span>${t('Pontos')}</span><input type="number" name="story_points" class="input" min="0" max="1000" step="any" placeholder="${esc(t('story points'))}"></label>
-        <label class="field"><span>${t('Sprint')}</span><select name="sprint_id" class="input"><option value="">${t('Backlog')}</option></select></label>
-      </div>
-      <div class="field-row">
+        ${state.users.length ? `
+          <div class="field"><span>${t('Responsáveis')}</span>
+            <div class="pick-people">${state.users.map((u) => `
+              <label class="pick"><input type="checkbox" name="assignee" value="${u.id}"><span>${avatar(u, { size: 22 })}${esc(u.name)}</span></label>`).join('')}
+            </div>
+          </div>` : ''}
         <label class="field"><span>${t('Labels')}</span><input name="tags" class="input" list="tag-options" placeholder="${esc(t('bug, ui, backend'))}" autocomplete="off">
           <datalist id="tag-options">${tags.map((g) => `<option value="${esc(g)}"></option>`).join('')}</datalist></label>
-        <label class="field"><span>${t('Repetir')}</span>
-          <select name="recurrence" class="input"><option value="">${t('Não repete')}</option>${FREQS.map((k) => opt(k, FREQ_LABEL[k], '')).join('')}</select>
-        </label>
-      </div>
-      ${state.users.length ? `
-        <div class="field"><span>${t('Responsáveis')}</span>
-          <div class="pick-people">${state.users.map((u) => `
-            <label class="pick"><input type="checkbox" name="assignee" value="${u.id}"><span>${avatar(u, { size: 18 })}${esc(u.name)}</span></label>`).join('')}
+        <details class="more-fields" ${moreOpen || preset.type || preset.start_date || preset.sprint_id ? 'open' : ''}>
+          <summary>${ICON.right}${t('Mais campos')}</summary>
+          <div class="field-row">
+            <label class="field"><span>${t('Tipo')}</span>
+              <select name="type" class="input">${TYPES.map((x) => opt(x, TYPE_LABEL[x], preset.type || 'task')).join('')}</select>
+            </label>
+            <label class="field"><span>${t('Início')}</span><input type="date" name="start_date" class="input" value="${preset.start_date || ''}"></label>
+            <label class="field"><span>${t('Estimativa')}</span><input name="estimate" class="input" placeholder="${esc(t('2h, 1h30m, 1d'))}"></label>
+            <label class="field"><span>${t('Pontos')}</span><input type="number" name="story_points" class="input" min="0" max="1000" step="any" placeholder="${esc(t('story points'))}"></label>
+            <label class="field"><span>${t('Sprint')}</span><select name="sprint_id" class="input"><option value="">${t('Backlog')}</option></select></label>
+            <label class="field"><span>${t('Repetir')}</span>
+              <select name="recurrence" class="input"><option value="">${t('Não repete')}</option>${FREQS.map((k) => opt(k, FREQ_LABEL[k], '')).join('')}</select>
+            </label>
           </div>
-        </div>` : ''}`,
+        </details>
+      </div>`,
     onOpen: (form) => {
       const f = form.elements;
       const refresh = async () => {
@@ -78,6 +84,10 @@ export function openNewTask(preset = {}) {
       };
       f.project_id.onchange = refresh;
       refresh();
+      $('.more-fields', form).ontoggle = (e) => {
+        moreOpen = e.target.open;
+        try { localStorage.setItem('tk_more_fields', moreOpen ? '1' : '0'); } catch {}
+      };
       f.title.focus();
     },
     onSubmit: async (form) => {
@@ -101,9 +111,12 @@ export function openNewTask(preset = {}) {
       body.column = /^\d+$/.test(col) ? Number(col) : col;
       if (f.project_id.value === 'new') body.project_name = f.project_name.value;
       else body.project_id = Number(f.project_id.value);
-      const task = await attempt(() => api('/api/tasks', { method: 'POST', body }), t('Tarefa criada'));
+      const task = await attempt(() => api('/api/tasks', { method: 'POST', body }));
       if (!task) return false;
       await load();
+      toast(t('{ref} criada', { ref: task.ref || `#${task.id}` }), {
+        action: { label: t('Abrir'), run: () => import('./drawer.js').then((m) => m.openTask(task.id)) },
+      });
     },
   });
 }

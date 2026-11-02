@@ -666,8 +666,9 @@ A sessão dura 90 dias. Uma requisição sem sessão válida recarrega o painel 
   - Projetos, com contadores de abertas, alerta vermelho de atrasadas, cadeado nos privados e o botão `+` para criar projeto (não aparece para visualizadores). Com mais de um workspace, os projetos são agrupados por organização › workspace › sub-workspace; cada grupo pode ser recolhido e clicar no workspace filtra as tarefas dele (e dos sub-workspaces).
   - Arquivados, recolhível.
   - Rodapé: Automações, Equipe, Organizações, Configurações e Administração (só administradores), seu nome (menu com Minha conta e preferências, Documentação da API e Sair) e o indicador "ao vivo".
-- **Cabeçalho:** nome do projeto, prefixo, selo de visibilidade (privado/público), pasta ou descrição, menu `⋯` do projeto, timer em execução, sino de notificações, botão do chat e **Nova tarefa** (os dois últimos somem para quem só lê).
-- **Barra de ferramentas:** abas (Quadro, Lista, Calendário, Gantt, Dashboard e, em projetos com pasta, [Mapa do código](#115-mapa-do-código)), seletor de sprint com engrenagem (dentro de um projeto), filtro de texto e Filtros.
+- **Cabeçalho** (primeira linha): nome do projeto, prefixo, selo de visibilidade (privado/público), menu `⋯` do projeto e, na mesma linha, a pasta ou a descrição (a pasta some abaixo de 1200 px); à direita, timer em execução, sino de notificações, botão do chat e **Nova tarefa** (os dois últimos somem para quem só lê).
+- **Barra de ferramentas** (segunda linha): abas (Quadro, Lista, Calendário, Gantt, Dashboard e, em projetos com pasta, [Mapa do código](#115-mapa-do-código)) à esquerda; à direita, seletor de sprint com engrenagem (dentro de um projeto), filtro de texto, os filtros ativos como chips com `×` (até três) e Filtros.
+- **Faixa de novidades:** veja a [seção 5.4](#54-quadro).
 - **Menu do projeto `⋯`:** Configurações do projeto, Sprints, Link público de leitura (projetos públicos, gerentes), Exportar CSV, Copiar caminho e, para donos, Arquivar/Desarquivar e Excluir.
 
 A URL guarda o estado (`?project=4&view=gantt&sprint=2&task=47`, ou `?workspace=3`), então links abrem direto na tarefa.
@@ -696,7 +697,18 @@ A URL guarda o estado (`?project=4&view=gantt&sprint=2&task=47`, ou `?workspace=
   - subtarefas, comentários, anexos e tempo gasto/estimado.
 - **Arrastar** entre colunas muda coluna e status; dentro da coluna, muda a ordem. Uma linha mostra onde o card vai cair. Se o fluxo do projeto não permite ir para uma coluna, ela é marcada e o movimento é recusado.
 - O `+` no topo da coluna cria uma tarefa já nela.
-- **Teclado:** `Enter` ou `Espaço` num card abre o detalhe.
+- **Teclado:**
+  - `Enter` ou `Espaço` num card abre o detalhe;
+  - as setas andam entre os cards (para cima e para baixo na coluna, para os lados entre colunas);
+  - `Shift` + setas levam o card junto: `←`/`→` mudam de coluna (respeitando o fluxo do projeto) e `↑`/`↓` mudam a ordem;
+  - o foco continua no mesmo card quando o quadro se atualiza ao vivo.
+- **Desfazer:** toda mudança de coluna, arrastando ou pelo teclado, mostra um aviso ("LOJ-2 movida para Em andamento") com o botão **Desfazer**, que volta a coluna, o status e a ordem anteriores.
+- **Novidades desde a última visita:**
+  - o painel guarda no navegador quando você esteve nele pela última vez (`tk_last_visit`); recarregar a página não conta como uma visita nova, só abrir o painel de novo numa aba nova;
+  - tarefas abertas criadas depois disso ganham uma brasa (filete laranja) na borda e o selo **Nova**, até você abrir a tarefa (as vistas ficam em `tk_seen`);
+  - uma faixa no topo do Quadro, da Lista, do Calendário e do Gantt resume: "5 tarefas novas desde ontem às 18:40 · 3 registradas pelo Claude · em 2 projetos", com **Ver só as novas** (vira um filtro, com chip na barra), **Marcar como vistas** e `×` para dispensar até a próxima visita.
+- **O Claude à vista:** tarefas que o Claude registrou mostram "✳ Claude" no card (e "Registrada pelo Claude" no detalhe).
+- **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o card (ou a linha, na Lista) acende uma brasa que se apaga em 4 segundos. Assim dá para ver o quadro reagir enquanto o Claude trabalha.
 
 ### 5.5 Lista
 
@@ -929,6 +941,8 @@ Para contas **visualizador** (que são visualizadoras em todos os projetos, mesm
 | `/` | Focar o filtro de texto |
 | `C` | Abrir/fechar o chat (não para visualizadores) |
 | `1` a `5` | Quadro, Lista, Calendário, Gantt, Dashboard |
+| Setas | No quadro: andam entre os cards |
+| `Shift` + setas | No quadro: levam o card focado para outra coluna (`←`/`→`) ou outra posição (`↑`/`↓`) |
 | `Esc` | Sai do campo, fecha a paleta, o detalhe, menus, painéis e a barra lateral |
 | `⌘↵` | Confirma diálogos, envia comentário, conclui edição da descrição |
 | `⌘B` / `⌘I` / `⌘K` | No editor: negrito, itálico, link |
@@ -936,9 +950,14 @@ Para contas **visualizador** (que são visualizadoras em todos os projetos, mesm
 
 ### 5.26 Celular, tema e acessibilidade
 
-- **Celular:** abaixo de 820 px, a barra lateral vira gaveta (☰); as colunas do quadro rolam na horizontal, com encaixe; as abas mostram só ícones, exceto a ativa; o cabeçalho fica compacto.
+- **Celular:** abaixo de 820 px, a barra lateral vira gaveta (☰); as abas ganham uma linha própria e os controles ficam embaixo; as colunas do quadro ocupam a largura da tela e rolam na horizontal, com encaixe; o detalhe da tarefa ocupa a tela inteira e os diálogos sobem de baixo, como folhas.
 - **Tema:** igual ao sistema, claro ou escuro (escolha em Minha conta).
-- **Acessibilidade:** respeita "reduzir movimento" do sistema; gráficos têm "Ver como tabela" e navegação por teclado.
+- **Visual ("Brasa"):** papel grafite quente nos dois temas, Inter para o texto e JetBrains Mono só para códigos e caminhos (as duas servidas pelo próprio painel, em `public/fonts/`, então funciona offline). O laranja é reservado para ação, lugar atual, hoje e o que o Claude acabou de tocar; prioridades usam barras em tinta e só a urgente fica vermelha. Os tokens ficam no começo de `public/styles.css`.
+- **Acessibilidade:**
+  - contraste conferido (WCAG AA): texto com pelo menos 4,5:1 sobre cada superfície e ícones e bordas de controle com pelo menos 3:1, nos dois temas;
+  - foco visível em todos os campos e botões; o detalhe da tarefa é um diálogo (`role="dialog"`) que recebe o foco no título ao abrir, fica inerte quando fechado e devolve o foco ao card ou à linha que o abriu;
+  - erros são anunciados na hora (`role="alert"`); os outros avisos, quando o leitor de tela puder;
+  - respeita "reduzir movimento" do sistema (sem deslocamentos, transições curtas, brasa parada); gráficos têm "Ver como tabela"; os cards se movem pelo teclado.
 
 ---
 

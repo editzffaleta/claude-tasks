@@ -40,7 +40,7 @@ export async function renderActivity(el) {
       <form class="act-filters" data-form="filters" role="search">
         ${filterControls()}
       </form>
-      <div class="act-feed" id="act-feed" aria-live="polite"><p class="empty-small">${t('Carregando…')}</p></div>
+      <div class="act-feed" id="act-feed" aria-live="polite"><div class="skeleton" aria-busy="true" aria-label="${t('Carregando…')}" style="padding: 8px 0">${'<div class="sk line"></div>'.repeat(8)}</div></div>
     </div>`;
   bind(el);
   await fetchRows(el, { reset: true });

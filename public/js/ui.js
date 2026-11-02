@@ -7,11 +7,13 @@ import { $, ICON, esc } from './util.js';
 // "close", que não dispara se o elemento já saiu da página).
 export function openDialog({ title, body, submitLabel = t('Salvar'), cancelLabel = t('Cancelar'), danger = false, wide = false, onSubmit, onOpen, onClose, footer = '' }) {
   const dialog = document.createElement('dialog');
+  const titleId = `dlg-${Math.random().toString(36).slice(2, 8)}`;
   dialog.className = `dialog${wide ? ' wide' : ''}`;
+  dialog.setAttribute('aria-labelledby', titleId);
   dialog.innerHTML = `
     <form method="dialog">
       <div class="dialog-head">
-        <h2>${esc(title)}</h2>
+        <h2 id="${titleId}">${esc(title)}</h2>
         <button type="button" class="icon-btn small" data-close aria-label="${esc(t('Fechar'))}">${ICON.close}</button>
       </div>
       <div class="dialog-body">${body}</div>

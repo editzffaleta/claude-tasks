@@ -3,7 +3,7 @@
 import { api, attempt, toast, upload } from './api.js';
 import { bindEditor, mentionNames, toolbar } from './editor.js';
 import { t, tn } from './i18n.js';
-import { can, labelFor, load, navigate, state, syncUrl, userById } from './state.js';
+import { can, labelFor, load, markSeen, navigate, state, syncUrl, userById } from './state.js';
 import { confirmAction, showMenu } from './ui.js';
 import {
   $, $$, DEPENDENCY_HINT, DEPENDENCY_LABEL, DEPENDENCY_TYPES, FREQS, FREQ_LABEL, ICON, PRIORITIES, PRIORITY_LABEL, SPRINT_STATUS_LABEL,
@@ -25,8 +25,15 @@ const managing = () => task && can(task.project_id, 'manage');
 const ro = () => (editable() ? '' : 'disabled');
 const mdOpts = () => ({ mentions: mentionNames() });
 
+let returnFocus = null;
+// "Mais detalhes" (relator, observadores, datas, estimativa…) fica aberto ou fechado como a pessoa deixou.
+let moreOpen = (() => { try { return localStorage.getItem('tk_more_props') === '1'; } catch { return false; } })();
+
 export async function openTask(id) {
   if (state.taskId !== id) { editingDesc = false; showTimeForm = false; replyTo = null; editingNote = null; }
+  const wasOpen = drawer().classList.contains('open');
+  if (!wasOpen && !drawer().contains(document.activeElement)) returnFocus = document.activeElement;
+  markSeen(id);
   state.taskId = id;
   syncUrl();
   try {
@@ -36,9 +43,12 @@ export async function openTask(id) {
     return closeDrawer();
   }
   render();
+  drawer().inert = false;
   drawer().classList.add('open');
   drawer().setAttribute('aria-hidden', 'false');
   $('#drawer-scrim').classList.add('show');
+  // O foco entra no detalhe (no título) para o teclado e os leitores de tela começarem por ele.
+  if (!wasOpen) requestAnimationFrame(() => $('#d-title')?.focus({ preventScroll: true }));
   $$('.selected[data-id], .selected[data-row]').forEach((c) => c.classList.remove('selected'));
   $$(`[data-id="${id}"].card, tr[data-id="${id}"], [data-row="${id}"]`).forEach((c) => c.classList.add('selected'));
 }
@@ -50,8 +60,12 @@ export function closeDrawer() {
   syncUrl();
   drawer()?.classList.remove('open');
   drawer()?.setAttribute('aria-hidden', 'true');
+  if (drawer()) drawer().inert = true;
   $('#drawer-scrim')?.classList.remove('show');
   $$('.selected[data-id], .selected[data-row]').forEach((c) => c.classList.remove('selected'));
+  // Devolve o foco para onde a pessoa estava (o cartão ou a linha que abriu a tarefa).
+  if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  returnFocus = null;
 }
 
 export async function refreshDrawer() {
@@ -148,6 +162,20 @@ function props(x) {
         ${people.map((u) => `<span class="person">${avatar(u, { size: 20 })}${esc(u.name)}${dis ? '' : `<button class="x" data-unassign="${u.id}" aria-label="${esc(t('Remover {name}', { name: u.name }))}">${ICON.close}</button>`}</span>`).join('')}
         ${dis ? (people.length ? '' : `<span class="muted">${t('Ninguém')}</span>`) : `<button class="add-chip" data-action="assign">${ICON.plus}${people.length ? '' : t('Atribuir')}</button>`}
       </div>
+      <span>${t('Labels')}</span>
+      <div class="people-field labels-field">
+        ${x.tags.map((g) => labelChip(g, !dis)).join('')}
+        ${dis ? (x.tags.length ? '' : '<span class="muted">—</span>') : `<button class="add-chip" data-action="labels">${ICON.tag}${x.tags.length ? '' : t('Adicionar')}</button>`}
+      </div>
+      <span>${t('Prazo')}</span>
+      <div class="inline"><input type="date" id="d-due" value="${x.due_date || ''}" ${dis}>${due && due.cls ? `<span class="due ${due.cls}">${due.title}</span>` : ''}</div>
+      <span>${t('Sprint')}</span>
+      <select id="d-sprint" ${dis}><option value="">${t('Backlog')}</option>${sprints.map((s) => `<option value="${s.id}" ${s.id === x.sprint_id ? 'selected' : ''}>${esc(s.name)}${s.status !== 'planning' ? ` · ${esc(SPRINT_STATUS_LABEL[s.status].toLowerCase())}` : ''}</option>`).join('')}</select>
+      ${fields.filter((f) => f.required).map((f) => `<span title="${esc(f.name)}">${esc(f.name)} *</span>${fieldInput(f)}`).join('')}
+    </div>
+    <details class="props-more" ${moreOpen ? 'open' : ''}>
+      <summary>${ICON.right}${t('Mais detalhes')}</summary>
+      <div class="props">
       <span>${t('Relator')}</span>
       <select id="d-reporter" ${dis}><option value="">—</option>${state.users.map((u) => `<option value="${u.id}" ${u.id === x.reporter_id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>
       <span>${t('Observadores')}</span>
@@ -156,22 +184,13 @@ function props(x) {
         ${dis ? '' : `<button class="add-chip" data-action="watchers">${ICON.plus}</button>`}
         <button class="link-btn small" data-action="watch">${ICON.eye}${watching ? t('Deixar de acompanhar') : t('Acompanhar')}</button>
       </div>
-      <span>${t('Labels')}</span>
-      <div class="people-field labels-field">
-        ${x.tags.map((g) => labelChip(g, !dis)).join('')}
-        ${dis ? (x.tags.length ? '' : '<span class="muted">—</span>') : `<button class="add-chip" data-action="labels">${ICON.tag}${x.tags.length ? '' : t('Adicionar')}</button>`}
-      </div>
       <span>${t('Início')}</span><input type="date" id="d-start" value="${x.start_date || ''}" ${dis}>
-      <span>${t('Prazo')}</span>
-      <div class="inline"><input type="date" id="d-due" value="${x.due_date || ''}" ${dis}>${due && due.cls ? `<span class="due ${due.cls}">${due.title}</span>` : ''}</div>
       <span>${t('Pontos')}</span><input type="number" id="d-points" min="0" max="1000" step="any" value="${x.story_points ?? ''}" placeholder="${esc(t('story points'))}" ${dis}>
       <span>${t('Estimativa')}</span>
       <div class="est-pair">
         <input id="d-estimate" value="${x.estimate_minutes ? fmtDuration(x.estimate_minutes) : ''}" placeholder="${esc(t('original: 2h, 1d'))}" title="${esc(t('Estimativa original'))}" ${dis}>
         <input id="d-remaining" value="${x.remaining_minutes != null ? fmtDuration(x.remaining_minutes) : ''}" placeholder="${esc(t('restante'))}" title="${esc(t('Estimativa restante'))}" ${dis}>
       </div>
-      <span>${t('Sprint')}</span>
-      <select id="d-sprint" ${dis}><option value="">${t('Backlog')}</option>${sprints.map((s) => `<option value="${s.id}" ${s.id === x.sprint_id ? 'selected' : ''}>${esc(s.name)}${s.status !== 'planning' ? ` · ${esc(SPRINT_STATUS_LABEL[s.status].toLowerCase())}` : ''}</option>`).join('')}</select>
       <span>${t('Projeto')}</span>
       <select id="d-project" ${dis}>${state.projects.filter((p) => (!p.archived_at && can(p, 'edit')) || p.id === x.project_id).map((p) => `<option value="${p.id}" ${p.id === x.project_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
       <span>${t('Recorrência')}</span>
@@ -179,9 +198,10 @@ function props(x) {
         <select id="d-recur" ${dis}><option value="">${t('Não repete')}</option>${opts(Object.fromEntries(FREQS.map((f) => [f, FREQ_LABEL[f]])), x.recurrence?.freq || '')}</select>
         ${recurrenceFields(x.recurrence)}
       </div>
-      ${fields.map((f) => `<span title="${esc(f.name)}">${esc(f.name)}${f.required ? ' *' : ''}</span>${fieldInput(f)}`).join('')}
+      ${fields.filter((f) => !f.required).map((f) => `<span title="${esc(f.name)}">${esc(f.name)}</span>${fieldInput(f)}`).join('')}
       ${x.project_path ? `<span>${t('Pasta')}</span><div class="path">${esc(tilde(x.project_path))}</div>` : ''}
-    </div>`;
+      </div>
+    </details>`;
 }
 
 // Caixas de seleção da descrição: clicar em ☐ marca a linha correspondente.
@@ -423,11 +443,12 @@ function render() {
       ${x.parent_id ? `<span>·</span><button class="link-btn parent" data-open="${x.parent_id}">${ICON.subtask}${esc(x.parent_title || `#${x.parent_id}`)}</button>` : ''}
       ${x.archived_at ? `<span class="chip">${t('arquivada')}</span>` : ''}
       ${!canEdit ? `<span class="chip">${ICON.eye}${t('somente leitura')}</span>` : ''}
+      ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Criada pelo Claude'))}">${ICON.claude}${t('Registrada pelo Claude')}</span>` : ''}
       <span class="spacer"></span>
-      <button class="icon-btn small ${watching ? 'on' : ''}" data-action="watch" title="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}">${ICON.eye}</button>
-      <button class="icon-btn small" data-action="copy" title="${esc(t('Copiar pedido para colar numa sessão do Claude'))}">${ICON.copy}</button>
-      <button class="icon-btn small" data-action="more" title="${esc(t('Mais ações'))}">${ICON.more}</button>
-      <button class="icon-btn small" data-action="close" title="${esc(t('Fechar (Esc)'))}">${ICON.close}</button>
+      <button class="icon-btn small ${watching ? 'on' : ''}" data-action="watch" aria-pressed="${!!watching}" aria-label="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}" title="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}">${ICON.eye}</button>
+      <button class="icon-btn small" data-action="copy" aria-label="${esc(t('Copiar pedido para colar numa sessão do Claude'))}" title="${esc(t('Copiar pedido para colar numa sessão do Claude'))}">${ICON.copy}</button>
+      <button class="icon-btn small" data-action="more" aria-label="${esc(t('Mais ações'))}" title="${esc(t('Mais ações'))}">${ICON.more}</button>
+      <button class="icon-btn small" data-action="close" aria-label="${esc(t('Fechar (Esc)'))}" title="${esc(t('Fechar (Esc)'))}">${ICON.close}</button>
     </div>
     <textarea class="title-edit" id="d-title" rows="1" maxlength="300" aria-label="${esc(t('Título'))}" ${canEdit ? '' : 'readonly'}>${esc(x.title)}</textarea>
     ${props(x)}
@@ -620,6 +641,14 @@ function fieldValue(fid) {
 
 export function mountDrawer() {
   const d = drawer();
+  d.inert = true;
+  d.setAttribute('role', 'dialog');
+  d.setAttribute('aria-labelledby', 'd-title');
+  d.addEventListener('toggle', (e) => {
+    if (!e.target.matches?.('.props-more')) return;
+    moreOpen = e.target.open;
+    try { localStorage.setItem('tk_more_props', moreOpen ? '1' : '0'); } catch {}
+  }, true);
   bindEditor(d);
 
   d.onclick = async (e) => {

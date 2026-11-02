@@ -1,11 +1,12 @@
 // Estrutura fixa do app: barra lateral, cabeçalho, abas, filtros, notificações e timer.
 import { api, attempt, toast } from './api.js';
 import { closeDrawer, openTask } from './drawer.js';
-import { N_, t, tn } from './i18n.js';
+import { N_, locale, t, tn } from './i18n.js';
 import { openPalette } from './palette.js';
 import { openSprints } from './sprints.js';
 import {
   state, navigate, load, currentProject, activeFilterCount, emit, TASK_VIEWS, can, isAdmin, workspaceById, workspaceTree,
+  since, isNew, markSeen, scopedProjectIds, userById,
 } from './state.js';
 import { openNewTask } from './taskform.js';
 import { confirmAction, openDialog, showMenu } from './ui.js';
@@ -50,6 +51,7 @@ export function mountShell(root) {
           </div>
           <div class="topbar-row toolbar" id="toolbar"></div>
         </header>
+        <div id="since-bar" hidden></div>
         <section class="view" id="view"></section>
       </main>
       <aside class="chat" id="chat" aria-label="${t('Chat com o Claude')}"></aside>
@@ -66,6 +68,7 @@ export function mountShell(root) {
   $('#heading').onclick = onHeadingClick;
   $('#top-actions').onclick = onActionsClick;
   $('#toolbar').onclick = onToolbarClick;
+  $('#since-bar').onclick = onSinceClick;
   $('#toolbar').oninput = debounce((e) => {
     if (e.target.id === 'search') { state.q = e.target.value; emit('filter'); }
   }, 120);
@@ -86,6 +89,7 @@ export function renderShell() {
   renderHeading();
   renderActions();
   renderToolbar();
+  renderSince();
 }
 
 // ---------- barra lateral ----------
@@ -145,7 +149,7 @@ function renderNav() {
   $('#nav').innerHTML = `
     <button class="nav-item ${isPage('dashboard') ? 'active' : ''}" data-go="dashboard"><span class="nav-icon">${ICON.dashboard}</span><span class="nav-label">${t('Dashboard')}</span></button>
     <button class="nav-item ${!state.projectId && !state.workspaceId && taskView && state.assignee !== 'me' ? 'active' : ''}" data-go="all">
-      <span class="nav-icon">${ICON.grid}</span><span class="nav-label">${t('Todas as tarefas')}</span><span class="nav-count">${open || ''}</span>
+      <span class="nav-icon">${ICON.inbox}</span><span class="nav-label">${t('Todas as tarefas')}</span><span class="nav-count">${open || ''}</span>
     </button>
     ${mine ? `<button class="nav-item ${!state.projectId && state.assignee === 'me' && taskView ? 'active' : ''}" data-go="mine">
       <span class="nav-icon">${ICON.user}</span><span class="nav-label">${t('Minhas tarefas')}</span>
@@ -316,8 +320,8 @@ function renderHeading() {
       ${p?.archived_at ? `<span class="chip">${t('arquivado')}</span>` : ''}
       ${p ? `<button class="icon-btn small" data-action="project-menu" aria-label="${esc(t('Opções do projeto'))}">${ICON.more}</button>` : ''}
       ${ws ? `<button class="icon-btn small" data-action="clear-ws" aria-label="${esc(t('Ver todos os projetos'))}" title="${esc(t('Ver todos os projetos'))}">${ICON.close}</button>` : ''}
-    </div>
-    <div class="heading-sub">${esc(sub)}</div>`;
+      <span class="heading-sub ${p?.path ? 'is-path' : ''}" title="${esc(sub)}">${esc(sub)}</span>
+    </div>`;
   document.title = `${p ? p.name : title} · ${t('Tarefas')}`;
 }
 
@@ -477,12 +481,87 @@ function renderToolbar() {
       </div>` : ''}
     ${taskView ? `
       <label class="search">${ICON.search}<input id="search" type="search" placeholder="${esc(t('Filtrar'))}" value="${esc(state.q)}" autocomplete="off"><kbd>/</kbd></label>
+      ${filterChips()}
       <button class="btn ghost bordered ${n ? 'active' : ''}" data-action="filters">${ICON.filter}${t('Filtros')}<span class="count">${n || ''}</span></button>` : ''}`;
+}
+
+// Filtros ativos à vista, cada um com um × para tirar.
+function filterChips() {
+  const chips = [];
+  const person = (v) => (v === 'me' ? t('Eu') : v === 'none' ? t('Sem responsável') : userById(Number(v))?.name || v);
+  const due = /* i18n */ { overdue: 'Atrasadas', today: 'Vencem hoje', week: 'Próximos 7 dias', none: 'Sem prazo' };
+  if (state.onlyNew) chips.push(['onlyNew', t('Só as novas')]);
+  if (state.prio) chips.push(['prio', PRIORITY_LABEL[state.prio]]);
+  if (state.type) chips.push(['type', TYPE_LABEL[state.type]]);
+  if (state.assignee) chips.push(['assignee', person(state.assignee)]);
+  if (state.due) chips.push(['due', t(due[state.due])]);
+  if (state.tag) chips.push(['tag', `#${state.tag}`]);
+  return chips.slice(0, 3).map(([key, label]) => `
+    <span class="filter-chip">${esc(label)}<button data-unfilter="${key}" aria-label="${esc(t('Tirar o filtro {f}', { f: label }))}">${ICON.close}</button></span>`).join('');
+}
+
+// ---------- faixa "enquanto você estava fora" ----------
+
+function sinceText(iso) {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(new Date()) - day(d)) / 86400000);
+  if (diff === 0) return t('hoje às {hora}', { hora: time });
+  if (diff === 1) return t('ontem às {hora}', { hora: time });
+  return t('{data} às {hora}', { data: d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' }), hora: time });
+}
+
+function newInScope() {
+  const scope = scopedProjectIds();
+  return state.tasks.filter((x) => isNew(x) && !x.parent_id && (!state.projectId || x.project_id === state.projectId) && (!scope || scope.has(x.project_id)));
+}
+
+function renderSince() {
+  const el = $('#since-bar');
+  const dismissed = (() => { try { return sessionStorage.getItem('tk_since_dismissed') === since; } catch { return false; } })();
+  const list = since && state.loaded && TASK_VIEWS.includes(state.view) && !dismissed ? newInScope() : [];
+  if (!list.length && !state.onlyNew) { el.hidden = true; el.innerHTML = ''; return; }
+  const claude = list.filter((x) => x.source === 'claude').length;
+  const projects = new Set(list.map((x) => x.project_id)).size;
+  const details = [
+    t('desde {quando}', { quando: sinceText(since) }),
+    claude ? tn(claude, '{n} registrada pelo Claude', '{n} registradas pelo Claude') : '',
+    !state.projectId && projects > 1 ? tn(projects, 'em {n} projeto', 'em {n} projetos') : '',
+  ].filter(Boolean).join(' · ');
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="since-bar" role="status">
+      <span class="ember" aria-hidden="true">${ICON.sparkles}</span>
+      <span class="since-text"><b>${esc(tn(list.length, '{n} tarefa nova', '{n} tarefas novas'))}</b> <span class="muted">${esc(details)}</span></span>
+      <button class="btn ghost bordered small" data-since="only">${state.onlyNew ? t('Ver todas') : t('Ver só as novas')}</button>
+      ${list.length ? `<button class="btn ghost small" data-since="seen">${t('Marcar como vistas')}</button>` : ''}
+      <button class="icon-btn small" data-since="close" aria-label="${esc(t('Dispensar'))}">${ICON.close}</button>
+    </div>`;
+}
+
+function onSinceClick(e) {
+  const b = e.target.closest('[data-since]');
+  if (!b) return;
+  const action = b.dataset.since;
+  if (action === 'only') state.onlyNew = !state.onlyNew;
+  if (action === 'seen') { state.onlyNew = false; markSeen(newInScope().map((x) => x.id)); }
+  if (action === 'close') {
+    try { sessionStorage.setItem('tk_since_dismissed', since); } catch {}
+    state.onlyNew = false;
+  }
+  emit('filter');
 }
 
 function onToolbarClick(e) {
   const tab = e.target.closest('[data-view]');
   if (tab) return navigate({ view: tab.dataset.view });
+  const off = e.target.closest('[data-unfilter]');
+  if (off) {
+    const key = off.dataset.unfilter;
+    state[key] = key === 'onlyNew' ? false : '';
+    return emit('filter');
+  }
   const b = e.target.closest('[data-action]');
   if (b?.dataset.action === 'sprints') openSprints(state.projectId);
   if (b?.dataset.action === 'filters') showFilters(b);

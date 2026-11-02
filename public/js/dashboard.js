@@ -470,7 +470,7 @@ export async function renderDashboard(el, { refresh = false } = {}) {
   const cached = stats && loadedFor === key;
   // Com cache: mostra na hora e atualiza em silêncio. Sem cache: "Carregando…".
   if (cached && !refresh) paint(el);
-  else if (!cached) el.innerHTML = `<div class="empty-small pad">${t('Carregando…')}</div>`;
+  else if (!cached) el.innerHTML = `<div class="skeleton" aria-busy="true" aria-label="${t('Carregando…')}"><div class="row">${'<div class="sk"></div>'.repeat(6)}</div><div class="row"><div class="sk tall"></div><div class="sk tall"></div></div></div>`;
   const slow = cached ? setTimeout(() => $('.dash', el)?.classList.add('refreshing'), 300) : null;
   try {
     const data = await api(`/api/stats${state.projectId ? `?project=${state.projectId}` : ''}`);
