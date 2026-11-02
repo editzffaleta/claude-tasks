@@ -360,7 +360,7 @@ body.chat-open .app { grid-template-columns: var(--sidebar) minmax(0, 1fr) var(-
   transition: box-shadow var(--dur-2);
 }
 .palette-btn:hover { box-shadow: 0 0 0 1px var(--border-strong), var(--shadow); color: var(--text-2); }
-.palette-btn span { flex: 1; }
+.palette-btn span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette-btn svg { width: 14px; height: 14px; }
 .nav { flex: 1; overflow-y: auto; padding: 6px 10px 14px; }
 .nav-heading {
@@ -409,17 +409,27 @@ body.chat-open .app { grid-template-columns: var(--sidebar) minmax(0, 1fr) var(-
 .dot { width: 8px; height: 8px; border-radius: 3px; background: var(--c, var(--text-3)); flex: none; display: inline-block; }
 .nav-item .dot { margin: 0 4px; }
 
-.sidebar-foot { border-top: 1px solid var(--border); padding: 8px 10px 10px; display: grid; gap: 1px; }
+/* A coluna mínima é zero: sem isso, um nome longo alarga a coluna e o rodapé passa da barra. */
+.sidebar-foot { border-top: 1px solid var(--border); padding: 6px 10px 8px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
 .sidebar-foot .nav-item { height: 28px; font-weight: 450; }
-.foot-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 0; }
-.user-chip { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; padding: 0 6px; border-radius: var(--r-sm); font-size: 13px; font-weight: 550; transition: background var(--dur-2); }
+.foot-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.foot-group.opening { animation: rise var(--dur-2) var(--ease-out); }
+.foot-toggle { color: var(--text-3); }
+.foot-toggle[aria-expanded="true"] { color: var(--text-2); }
+.foot-toggle.has-current { background: var(--active); color: var(--text); }
+.foot-toggle.has-current::before { content: ""; position: absolute; left: -10px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.foot-caret { display: grid; place-items: center; flex: none; color: var(--text-3); }
+.foot-caret svg { width: 12px; height: 12px; }
+.foot-caret.up svg { transform: rotate(180deg); }
+.user-chip { display: flex; align-items: center; gap: 7px; min-width: 0; height: 34px; margin-top: 2px; padding: 0 8px 0 4px; border-radius: var(--r-sm); font-size: 13px; font-weight: 550; text-align: left; transition: background var(--dur-2); }
 .user-chip:hover { background: var(--hover); }
-.user-chip > span:not(.avatar) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-chip svg { width: 12px; height: 12px; color: var(--text-3); }
-.live { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); white-space: nowrap; padding-right: 4px; }
-.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--done); box-shadow: 0 0 0 3px color-mix(in srgb, var(--done) 20%, transparent); animation: breathe 3.2s ease-in-out infinite; }
-.live.off .live-dot { background: var(--blocked); box-shadow: none; animation: none; }
-@keyframes breathe { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--done) 6%, transparent); } }
+.user-avatar { position: relative; display: grid; flex: none; }
+.user-text { flex: 1; display: grid; min-width: 0; line-height: 1.25; }
+.user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-text small { font-size: 11px; font-weight: 500; color: var(--blocked); }
+.live-dot { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--sidebar-bg); background: var(--done); animation: breathe 3.2s ease-in-out infinite; }
+.user-chip.off .live-dot { background: var(--blocked); animation: none; }
+@keyframes breathe { 50% { background: color-mix(in srgb, var(--done) 55%, var(--sidebar-bg)); } }
 
 /* Avatar: tinta sobre um tom suave da cor da pessoa (contraste alto nos dois temas). */
 .avatar {
@@ -1431,10 +1441,12 @@ body.chat-open .chat { display: flex; }
 @media (pointer: coarse) {
   .icon-btn.tiny { width: 32px; height: 32px; }
   .check-btn { width: 22px; height: 22px; }
+  .nav-item, .nav-ws, .sidebar-foot .nav-item { height: 40px; }
+  .user-chip { height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root { --rise: 0px; --dur-3: 120ms; --dur-4: 120ms; }
-  .card.fresh, .sk, .live-dot, .timer-dot, .flag.timer, .typing span, .board.animate .card, .dialog[open], .menu-pop, .float-panel, .auth-card, .since-bar { animation: none !important; }
+  .card.fresh, .sk, .live-dot, .foot-group.opening, .timer-dot, .flag.timer, .typing span, .board.animate .card, .dialog[open], .menu-pop, .float-panel, .auth-card, .since-bar { animation: none !important; }
   .card.fresh::before { animation: none !important; opacity: 1; }
   .btn:active, .icon-btn:active, .card:active, .check-btn:active { transform: none; }
 }

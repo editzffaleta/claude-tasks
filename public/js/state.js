@@ -197,11 +197,15 @@ function startPolling(onChange) {
   }, 3000);
 }
 
+let live = true;
+export const isLive = () => live;
+
 function setLive(ok) {
-  const el = document.querySelector('.live');
-  if (!el) return;
-  el.classList.toggle('off', !ok);
-  el.querySelector('span:last-child').textContent = ok ? t('ao vivo') : t('sem conexão');
+  if (ok === live) return;
+  live = ok;
+  const status = document.querySelector('#live-status');
+  if (status) status.textContent = ok ? t('ao vivo') : t('sem conexão');
+  emit('live');
 }
 
 // ---------- consultas ----------

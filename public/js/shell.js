@@ -6,7 +6,7 @@ import { openPalette } from './palette.js';
 import { openSprints } from './sprints.js';
 import {
   state, navigate, load, currentProject, activeFilterCount, emit, TASK_VIEWS, can, isAdmin, workspaceById, workspaceTree,
-  since, markSeen, newTasks, singleKeys, triageable, userById,
+  since, markSeen, newTasks, singleKeys, triageable, userById, isLive,
 } from './state.js';
 import { openNewTask } from './taskform.js';
 import { openTriage } from './triage.js';
@@ -29,6 +29,23 @@ const TABS = [
 // Grupos recolhidos na barra lateral (por workspace), guardados no navegador.
 const collapsed = new Set(JSON.parse((() => { try { return localStorage.getItem('tk_collapsed') || '[]'; } catch { return '[]'; } })()));
 const saveCollapsed = () => { try { localStorage.setItem('tk_collapsed', JSON.stringify([...collapsed])); } catch {} };
+// O grupo Gerenciar, no rodapé da barra lateral, começa fechado para sobrar espaço para os projetos.
+const MANAGE_PAGES = ['automations', 'team', 'organizations', 'settings', 'admin'];
+let manageOpen = (() => { try { return localStorage.getItem('tk_manage_open') === '1'; } catch { return false; } })();
+let managedPage = null;
+
+// As atualizações ao vivo redesenham a barra lateral o tempo todo. Se nada mudou, ela fica como está
+// (um menu aberto não perde o botão); se mudou, o foco do teclado volta ao mesmo item.
+const painted = new WeakMap();
+function paintBar(el, html) {
+  if (painted.get(el) === html) return;
+  painted.set(el, html);
+  const focused = el.contains(document.activeElement) ? document.activeElement.dataset : null;
+  const key = focused && ['project', 'go', 'ws'].find((k) => focused[k]);
+  el.innerHTML = html;
+  el.querySelectorAll('.active').forEach((b) => b.setAttribute('aria-current', 'page'));
+  if (key) el.querySelector(`[data-${key}="${focused[key]}"]`)?.focus();
+}
 
 export function mountShell(root) {
   root.innerHTML = `
@@ -41,6 +58,7 @@ export function mountShell(root) {
         <button class="palette-btn" id="palette-btn">${ICON.search}<span>${t('Buscar ou ir para…')}</span><kbd>⌘K</kbd></button>
         <nav class="nav" id="nav" aria-label="${esc(t('Navegação'))}"></nav>
         <div class="sidebar-foot" id="sidebar-foot"></div>
+        <div class="sr-only" id="live-status" role="status"></div>
       </aside>
       <div class="sidebar-scrim" id="sidebar-scrim"></div>
       <main class="main">
@@ -147,7 +165,7 @@ function renderNav() {
     projectsHtml += active.filter((p) => !known.has(p.workspace_id)).map((p) => item(p)).join('');
   }
 
-  $('#nav').innerHTML = `
+  paintBar($('#nav'), `
     <button class="nav-item ${isPage('dashboard') ? 'active' : ''}" data-go="dashboard"><span class="nav-icon">${ICON.dashboard}</span><span class="nav-label">${t('Dashboard')}</span></button>
     <button class="nav-item ${!state.projectId && !state.workspaceId && taskView && state.assignee !== 'me' ? 'active' : ''}" data-go="all">
       <span class="nav-icon">${ICON.inbox}</span><span class="nav-label">${t('Todas as tarefas')}</span><span class="nav-count">${open || ''}</span>
@@ -161,22 +179,34 @@ function renderNav() {
     ${projectsHtml || `<div class="nav-empty">${t('Nenhum projeto ainda')}</div>`}
     ${archived.length ? `
       <button class="nav-heading toggle" data-go="toggle-archived">${state.showArchivedProjects ? ICON.down : ICON.right} ${t('Arquivados ({n})', { n: archived.length })}</button>
-      ${state.showArchivedProjects ? archived.map((p) => item(p)).join('') : ''}` : ''}`;
+      ${state.showArchivedProjects ? archived.map((p) => item(p)).join('') : ''}` : ''}`);
 }
 
 function renderFoot() {
   const me = state.me;
-  const page = (v, icon, label) => `<button class="nav-item ${state.view === v && !state.projectId ? 'active' : ''}" data-go="${v}"><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span></button>`;
-  $('#sidebar-foot').innerHTML = `
-    ${page('automations', ICON.zap, t('Automações'))}
-    ${page('team', ICON.users, t('Equipe'))}
-    ${page('organizations', ICON.building, t('Organizações'))}
-    ${isAdmin() ? page('settings', ICON.gear, t('Configurações')) : ''}
-    ${isAdmin() ? page('admin', ICON.shield, t('Administração')) : ''}
-    <div class="foot-row">
-      <button class="user-chip" data-go="user-menu" aria-haspopup="menu" aria-expanded="false">${avatar(me, { size: 24 })}<span>${esc(me?.name || '')}</span>${ICON.down}</button>
-      <div class="live" title="${esc(t('Atualização automática'))}"><span class="live-dot"></span><span>${t('ao vivo')}</span></div>
-    </div>`;
+  const here = (v) => state.view === v && !state.projectId;
+  const page = (v, icon, label) => `<button class="nav-item ${here(v) ? 'active' : ''}" data-go="${v}"><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span></button>`;
+  // Chegar a uma página do grupo (pela paleta, por exemplo) abre o grupo, para ela aparecer marcada.
+  const inManage = MANAGE_PAGES.find(here) || null;
+  if (inManage && inManage !== managedPage) manageOpen = true;
+  managedPage = inManage;
+  const online = isLive();
+  paintBar($('#sidebar-foot'), `
+    <nav class="foot-group" id="foot-manage" aria-label="${esc(t('Gerenciar'))}" ${manageOpen ? '' : 'hidden'}>
+      ${page('automations', ICON.zap, t('Automações'))}
+      ${page('team', ICON.users, t('Equipe'))}
+      ${page('organizations', ICON.building, t('Organizações'))}
+      ${isAdmin() ? page('settings', ICON.gear, t('Configurações')) : ''}
+      ${isAdmin() ? page('admin', ICON.shield, t('Administração')) : ''}
+    </nav>
+    <button class="nav-item foot-toggle ${inManage && !manageOpen ? 'has-current' : ''}" data-go="toggle-manage" aria-expanded="${manageOpen}" aria-controls="foot-manage">
+      <span class="nav-icon">${ICON.sliders}</span><span class="nav-label">${t('Gerenciar')}</span><span class="foot-caret ${manageOpen ? '' : 'up'}">${ICON.down}</span>
+    </button>
+    <button class="user-chip ${online ? '' : 'off'}" data-go="user-menu" aria-haspopup="menu" aria-expanded="false" title="${esc(me?.name || '')}">
+      <span class="user-avatar">${avatar(me, { size: 22 })}<span class="live-dot" title="${esc(online ? `${t('ao vivo')} · ${t('Atualização automática')}` : t('sem conexão'))}"></span></span>
+      <span class="user-text"><span class="user-name">${esc(me?.name || '')}</span>${online ? '' : `<small>${t('sem conexão')}</small>`}</span>
+      <span class="foot-caret up">${ICON.down}</span>
+    </button>`);
 }
 
 function onNavClick(e) {
@@ -212,6 +242,16 @@ function onFootClick(e) {
   const b = e.target.closest('[data-go]');
   if (!b) return;
   const go = b.dataset.go;
+  if (go === 'toggle-manage') {
+    manageOpen = !manageOpen;
+    try { localStorage.setItem('tk_manage_open', manageOpen ? '1' : '0'); } catch {}
+    renderFoot();
+    if (!manageOpen) return;
+    // O grupo abre para cima, antes do botão: pelo teclado, o foco entra nele para não ficar para trás.
+    $('#foot-manage').classList.add('opening');
+    if (e.detail === 0) $('#foot-manage .nav-item')?.focus();
+    return;
+  }
   if (go === 'user-menu') {
     return showMenu(b, [
       { label: t('Minha conta e preferências'), icon: ICON.user, onClick: () => navigate({ projectId: null, view: 'account' }) },

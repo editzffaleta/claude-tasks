@@ -720,6 +720,7 @@ export default {
   'Dashboard': 'Dashboard',
   'Configurações do projeto': 'Projekteinstellungen',
   'Administração': 'Administration',
+  'Gerenciar': 'Verwalten',
   'Minha conta e preferências': 'Mein Konto und Präferenzen',
   'Sprints': 'Sprints',
   'Ações e páginas': 'Aktionen und Seiten',
@@ -1096,7 +1097,7 @@ export default {
   'Nenhuma tarefa encontrada.': 'Keine Aufgaben gefunden.',
 
   // shell.js
-  'Buscar ou ir para…': 'Suchen oder springen zu…',
+  'Buscar ou ir para…': 'Suchen oder öffnen…',
   'Navegação': 'Navigation',
   'Abrir menu': 'Menü öffnen',
   'Detalhes da tarefa': 'Aufgabendetails',
