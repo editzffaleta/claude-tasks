@@ -76,7 +76,9 @@ export function mountShell(root) {
       <aside class="chat" id="chat" aria-label="${t('Chat com o Claude')}"></aside>
     </div>
     <div class="drawer-scrim" id="drawer-scrim"></div>
-    <aside class="drawer" id="drawer" aria-label="${esc(t('Detalhes da tarefa'))}" aria-hidden="true" data-drop-label="${esc(t('Solte para anexar'))}"><div class="drawer-inner" id="drawer-inner"></div></aside>`;
+    <aside class="drawer" id="drawer" aria-label="${esc(t('Detalhes da tarefa'))}" aria-hidden="true" data-drop-label="${esc(t('Solte para anexar'))}"><div class="drawer-inner" id="drawer-inner"></div></aside>
+    <div class="update-notice" id="update-notice" role="status" hidden></div>`;
+  $('#update-notice').onclick = onUpdateClick;
   $('#palette-btn').onclick = () => { toggleSidebar(false); openPalette(); };
 
   $('#menu-btn').onclick = () => toggleSidebar(true);
@@ -109,6 +111,34 @@ export function renderShell() {
   renderActions();
   renderToolbar();
   renderSince();
+  renderUpdateNotice();
+}
+
+// ---------- aviso de versão nova ----------
+
+let dismissedPanel = null;
+
+function renderUpdateNotice() {
+  const el = $('#update-notice');
+  const show = state.newerPanel && state.newerPanel !== dismissedPanel;
+  el.hidden = !show;
+  paintBar(el, show ? `
+    <span>${t('Há uma versão nova do painel')}</span>
+    <button class="btn primary small" data-update="reload">${t('Recarregar')}</button>
+    <button class="icon-btn small" data-update="dismiss" aria-label="${esc(t('Fechar'))}" title="${esc(t('Fechar'))}">${ICON.close}</button>` : '');
+}
+
+async function onUpdateClick(e) {
+  const action = e.target.closest('[data-update]')?.dataset.update;
+  if (action === 'dismiss') {
+    dismissedPanel = state.newerPanel;
+    return renderUpdateNotice();
+  }
+  if (action !== 'reload') return;
+  // Recarregar apaga um comentário ou uma descrição que ainda não foram salvos.
+  const typed = [...document.querySelectorAll('textarea')].some((el) => el.value.trim());
+  if (typed && !(await confirmAction(t('Há texto digitado nesta tela. Recarregar pode apagar o que não foi salvo.'), { title: t('Recarregar'), okLabel: t('Recarregar') }))) return;
+  location.reload();
 }
 
 // ---------- barra lateral ----------

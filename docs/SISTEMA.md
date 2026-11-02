@@ -192,6 +192,7 @@ claude-tasks/
 │   ├── mapa.js               Mapa do código no quadro: rota /mapa/<id>/, situação, tarefas
 │   │                         ligadas aos arquivos, tarefas criadas pelo mapa, consulta
 │   ├── openapi.js            documento OpenAPI 3.1 (/api/openapi.json)
+│   ├── panelversion.js       hash dos arquivos de public/, para avisar janelas abertas
 │   ├── routes.js             rotas da API REST e guardas de permissão
 │   ├── server.js             HTTP: Host/Origin, cookies, SSE, estáticos, agendador
 │   ├── mcp.js                servidor MCP (protocolo e instructions)
@@ -239,8 +240,9 @@ claude-tasks/
 ### 2.5 Tempo real
 
 - **Servidor.** `GET /api/events` abre um fluxo SSE. A cada 700 ms o servidor compara `store.version()` — que junta o `PRAGMA data_version` do SQLite (muda quando **outro** processo grava, como o MCP) com um contador de gravações do próprio servidor — e avisa todas as abas abertas.
-- **Eventos:** `hello` (`{ version, unread }`, na conexão), `change` (`{ version }`), `unread` (`{ unread }`) e `ui` (comando do Claude para abrir algo na tela, ver `show_in_dashboard` em [MCP.md](MCP.md)). Um comentário `: ping` sai a cada 25 s para manter a conexão, e o cabeçalho `x-accel-buffering: no` desliga o buffer do nginx.
-- **Cliente.** Ao receber `change`, o painel recarrega `/api/state`. Se o SSE falhar 4 vezes seguidas, passa a consultar `/api/version` e `/api/ui-commands` a cada 3 s. O indicador "ao vivo" no rodapé da barra lateral vira "sem conexão" quando nada responde.
+- **Eventos:** `hello` (`{ version, unread, panel }`, na conexão), `change` (`{ version }`), `unread` (`{ unread }`), `panel` (`{ panel }`, quando os arquivos do painel mudam) e `ui` (comando do Claude para abrir algo na tela, ver `show_in_dashboard` em [MCP.md](MCP.md)). Um comentário `: ping` sai a cada 25 s para manter a conexão, e o cabeçalho `x-accel-buffering: no` desliga o buffer do nginx.
+- **Cliente.** Ao receber `change`, o painel recarrega `/api/state`. Se o SSE falhar 4 vezes seguidas, passa a consultar `/api/version` e `/api/ui-commands` a cada 3 s. O ponto na foto da pessoa, no rodapé da barra lateral, fica vermelho e mostra "sem conexão" quando nada responde.
+- **Versão do painel.** Uma janela aberta guarda o código na memória e continua nele depois de uma atualização. Por isso o servidor mantém um hash dos arquivos de `public/` (`src/panelversion.js`), conferido a cada 2 s, e o manda em `hello`, em `panel` e em `/api/version`. A janela guarda a primeira versão que recebe; se chegar outra, mostra **Há uma versão nova do painel**, com **Recarregar** e um `×` que dispensa o aviso até a próxima versão. Ela nunca recarrega sozinha e, se houver texto digitado num campo de várias linhas, pede confirmação antes. Trocar de branch e voltar não gera aviso, porque o hash olha o conteúdo, não a data dos arquivos.
 - **Comandos para o painel** (`ui_commands`) valem por 2 minutos e são entregues uma única vez, à primeira aba aberta da pessoa indicada (ou de qualquer pessoa, quando o comando não tem dono).
 - **Edição em andamento.** As páginas com formulário (configurações, equipe, automações etc.) não são redesenhadas pelas atualizações ao vivo, e o detalhe da tarefa não apaga o que está sendo digitado.
 

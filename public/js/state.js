@@ -10,6 +10,7 @@ export const PAGES = ['dashboard', 'activity', 'automations', 'team', 'organizat
 
 export const state = {
   me: null,
+  newerPanel: null,
   prefs: null,
   users: [],
   projects: [],
@@ -163,9 +164,11 @@ export function startLive(onChange) {
     failures = 0;
     setLive(true);
     const d = JSON.parse(e.data);
+    checkPanel(d.panel);
     if (d.unread !== state.unread) { state.unread = d.unread; emit('unread'); }
     reloadIfChanged(d.version, onChange);
   });
+  source.addEventListener('panel', (e) => checkPanel(JSON.parse(e.data).panel));
   source.addEventListener('change', (e) => reloadIfChanged(JSON.parse(e.data).version, onChange));
   source.addEventListener('unread', (e) => { state.unread = JSON.parse(e.data).unread; emit('unread'); });
   source.addEventListener('ui', (e) => { const cmd = JSON.parse(e.data); uiHandlers.forEach((fn) => fn(cmd)); });
@@ -186,8 +189,9 @@ function stopLive() {
 function startPolling(onChange) {
   polling = setInterval(async () => {
     try {
-      const { version, unread } = await api('/api/version');
+      const { version, unread, panel } = await api('/api/version');
       setLive(true);
+      checkPanel(panel);
       if (unread !== state.unread) { state.unread = unread; emit('unread'); }
       await reloadIfChanged(version, onChange);
       for (const cmd of await api('/api/ui-commands')) uiHandlers.forEach((fn) => fn(cmd));
@@ -195,6 +199,18 @@ function startPolling(onChange) {
       setLive(false);
     }
   }, 3000);
+}
+
+// A versão do painel com que esta janela abriu. Se o servidor passa a ter outra, o código aqui na
+// memória ficou para trás: o aviso aparece e a pessoa recarrega quando quiser.
+let openedPanel = null;
+function checkPanel(panel) {
+  if (!panel) return;
+  openedPanel ??= panel;
+  const newer = panel === openedPanel ? null : panel;
+  if (newer === state.newerPanel) return;
+  state.newerPanel = newer;
+  emit('panel');
 }
 
 let live = true;

@@ -180,7 +180,8 @@ test('tempo real: /api/events manda hello e avisa mudanças', async () => {
     while (!re.test(text) && Date.now() < deadline) text += decoder.decode((await reader.read()).value || new Uint8Array(), { stream: true });
     return re.test(text);
   };
-  assert.ok(await until(/event: hello/));
+  assert.ok(await until(/event: hello\ndata: .*"panel":"[0-9a-f]{12}"/));
+  assert.match(ok(await req('/api/version')).panel, /^[0-9a-f]{12}$/);
   ok(await req('/api/tasks', { method: 'POST', body: { project_id: A.id, title: 'Nova ao vivo' } }));
   assert.ok(await until(/event: change/));
   controller.abort();
