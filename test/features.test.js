@@ -203,6 +203,14 @@ test('busca universal encontra tarefas, comentários, projetos e pessoas', () =>
   assert.equal(store.search('Site').projects[0].id, P.id);
 });
 
+test('atalhos de uma tecla vêm ligados e a pessoa pode desligar', () => {
+  const ana = store.findUser('ana@ex.test');
+  assert.equal(store.userSettings(ana.id).single_keys, true);
+  assert.equal(store.updateUserSettings(ana.id, { single_keys: false }).single_keys, false);
+  assert.equal(store.userSettings(ana.id).single_keys, false);
+  assert.equal(store.updateUserSettings(ana.id, { single_keys: true }).single_keys, true);
+});
+
 test('aviso de prazo com o canal "no painel" desligado não se repete e não aparece no sino', () => {
   const ana = store.findUser('ana@ex.test');
   store.updateUserSettings(ana.id, { notify: { due: { app: false, email: true } } });

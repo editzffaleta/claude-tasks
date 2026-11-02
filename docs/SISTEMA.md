@@ -155,6 +155,7 @@ claude-tasks/
 │       ├── activity.js       página Atividade
 │       ├── drawer.js         detalhe da tarefa
 │       ├── taskform.js       diálogo de nova tarefa
+│       ├── triage.js         triagem guiada das tarefas novas
 │       ├── sprints.js        gerenciador de sprints
 │       ├── projectsettings.js configurações do projeto
 │       ├── organizations.js  organizações, workspaces e papéis
@@ -706,7 +707,12 @@ A URL guarda o estado (`?project=4&view=gantt&sprint=2&task=47`, ou `?workspace=
 - **Novidades desde a última visita:**
   - o painel guarda no navegador quando você esteve nele pela última vez (`tk_last_visit`); recarregar a página não conta como uma visita nova, só abrir o painel de novo numa aba nova;
   - tarefas abertas criadas depois disso ganham uma brasa (filete laranja) na borda e o selo **Nova**, até você abrir a tarefa (as vistas ficam em `tk_seen`);
-  - uma faixa no topo do Quadro, da Lista, do Calendário e do Gantt resume: "5 tarefas novas desde ontem às 18:40 · 3 registradas pelo Claude · em 2 projetos", com **Ver só as novas** (vira um filtro, com chip na barra), **Marcar como vistas** e `×` para dispensar até a próxima visita.
+  - uma faixa no topo do Quadro, da Lista, do Calendário e do Gantt resume: "5 tarefas novas desde ontem às 18:40 · 3 registradas pelo Claude · em 2 projetos", com **Revisar as novas** (a triagem guiada, abaixo), **Ver só as novas** (vira um filtro, com chip na barra), **Marcar como vistas** e `×` para dispensar até a próxima visita.
+- **Triagem guiada:** **Revisar as novas**, na faixa ou na paleta ⌘K, mostra uma tarefa nova por vez, da mais antiga para a mais recente, só das que você pode editar:
+  - título, descrição, projeto, tipo e quem registrou, com um contador ("2 de 5") e uma barra de progresso;
+  - `1` a `5` escolhem a prioridade (Urgente a Mínima), `I` atribui a você, `S` põe na sprint ativa do projeto (o botão só aparece se houver uma) e `D` abre o prazo; a mudança vale na hora, como no detalhe da tarefa;
+  - `Enter` aceita (tira a tarefa das novidades e vai para a próxima), `→` pula, `←` volta, `Backspace` arquiva (com **Desfazer**, tecla `Z`), `O` abre o detalhe completo e `Esc` fecha;
+  - no fim, um resumo com o que foi aceito, arquivado e pulado: "Triagem zerada", ou **Revisar as puladas** se sobrou alguma.
 - **O Claude à vista:** tarefas que o Claude registrou mostram "✳ Claude" no card (e "Registrada pelo Claude" no detalhe).
 - **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o card (ou a linha, na Lista) acende uma brasa que se apaga em 4 segundos. Assim dá para ver o quadro reagir enquanto o Claude trabalha.
 
@@ -870,7 +876,7 @@ Feed de tudo o que aconteceu nos projetos que você pode ver: tarefas criadas, c
 ### 5.17 Minha conta e preferências
 
 - **Perfil:** foto (trocar ou remover), nome, e-mail e cor.
-- **Preferências:** idioma (ou o padrão do quadro), tema (igual ao sistema, claro ou escuro) e visão inicial ("Abrir em": Quadro, Lista, Calendário, Gantt ou Dashboard).
+- **Preferências:** idioma (ou o padrão do quadro), tema (igual ao sistema, claro ou escuro), visão inicial ("Abrir em": Quadro, Lista, Calendário, Gantt ou Dashboard) e **Atalhos de uma tecla** (N, C, K, / e 1 a 5; desligados, as dicas de tecla somem e ⌘K continua valendo).
 - **Notificações:** matriz com os 9 tipos de notificação nas linhas e os canais **No painel**, **E-mail** e **macOS** nas colunas. A coluna de e-mail fica desabilitada enquanto o SMTP não estiver configurado. O sino tem um atalho para esta tela.
 - **Senha:** trocar (exige a senha atual).
 
@@ -947,6 +953,10 @@ Para contas **visualizador** (que são visualizadoras em todos os projetos, mesm
 | `⌘↵` | Confirma diálogos, envia comentário, conclui edição da descrição |
 | `⌘B` / `⌘I` / `⌘K` | No editor: negrito, itálico, link |
 | `Enter` | No título, labels e estimativa: salva. Em subtarefa ou dependência: adiciona. |
+| Setas, `Home`, `End`, inicial do nome | Num menu: andam pelos itens (`Tab` e `Esc` fecham e devolvem o foco ao botão) |
+| `1` a `5`, `I`, `S`, `D`, `O`, `Z`, `Enter`, `Backspace`, `←`, `→` | Na triagem guiada: veja a [seção 5.4](#54-quadro) |
+
+Os atalhos de uma tecla (`K`, `N`, `/`, `C` e `1` a `5`) podem ser desligados em **Minha conta → Preferências**. Os de dentro de um componente com foco (cards, menus, triagem) continuam valendo.
 
 ### 5.26 Celular, tema e acessibilidade
 
@@ -957,6 +967,8 @@ Para contas **visualizador** (que são visualizadoras em todos os projetos, mesm
   - contraste conferido (WCAG AA): texto com pelo menos 4,5:1 sobre cada superfície e ícones e bordas de controle com pelo menos 3:1, nos dois temas;
   - foco visível em todos os campos e botões; o detalhe da tarefa é um diálogo (`role="dialog"`) que recebe o foco no título ao abrir, fica inerte quando fechado e devolve o foco ao card ou à linha que o abriu;
   - erros são anunciados na hora (`role="alert"`); os outros avisos, quando o leitor de tela puder;
+  - menus têm `role="menu"`, abrem com o foco no primeiro item e o botão indica `aria-haspopup` e `aria-expanded`; os painéis de Filtros e Notificações são diálogos leves, com o foco dentro, e `Esc` devolve o foco ao botão;
+  - a paleta é um combobox com lista (`aria-activedescendant`, opções agrupadas por seção) e anuncia o número de resultados; as abas são navegação, com `aria-current`;
   - respeita "reduzir movimento" do sistema (sem deslocamentos, transições curtas, brasa parada); gráficos têm "Ver como tabela"; os cards se movem pelo teclado.
 
 ---
