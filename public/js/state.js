@@ -44,7 +44,42 @@ export const state = {
   showSubtasks: false,
   showArchived: false,
   showArchivedProjects: false,
+  onlyNew: false,
+  // Tarefas que mudaram na última atualização ao vivo (a "brasa viva" dos cartões).
+  fresh: new Set(),
 };
+
+// ---------- novidades desde a última visita ----------
+// A visita começa quando a aba abre: o momento da visita anterior fica guardado na sessão, então
+// recarregar a página não apaga as marcas de "Nova". Abrir a tarefa a marca como vista.
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+function readSince() {
+  try {
+    let since = sessionStorage.getItem('tk_since');
+    if (since === null) {
+      since = localStorage.getItem('tk_last_visit') || '';
+      sessionStorage.setItem('tk_since', since);
+    }
+    return since || null;
+  } catch {
+    return null;
+  }
+}
+export const since = readSince();
+const touchVisit = () => store.set('tk_last_visit', new Date().toISOString());
+touchVisit();
+addEventListener('pagehide', touchVisit);
+document.addEventListener('visibilitychange', () => { if (document.hidden) touchVisit(); });
+
+const seen = new Set(JSON.parse(store.get('tk_seen') || '[]'));
+export const isNew = (t) => !!since && t.status !== 'done' && !t.archived_at && t.created_at > since && !seen.has(t.id);
+export function markSeen(ids) {
+  let changed = false;
+  for (const id of [].concat(ids)) if (!seen.has(id)) { seen.add(id); changed = true; }
+  if (!changed) return;
+  store.set('tk_seen', JSON.stringify([...seen].slice(-800)));
+  emit('seen');
+}
 
 const listeners = new Set();
 export const subscribe = (fn) => listeners.add(fn);
@@ -70,7 +105,8 @@ export function navigate(patch) {
   else emit('route');
 }
 
-export async function load() {
+export async function load({ live = false } = {}) {
+  const before = live && state.loaded ? new Map(state.tasks.map((t) => [t.id, t.updated_at])) : null;
   const q = new URLSearchParams();
   if (state.projectId) q.set('project', state.projectId);
   if (state.showArchived) q.set('archived', '1');
@@ -81,6 +117,14 @@ export async function load() {
     return load();
   }
   Object.assign(state, data, { loaded: true });
+  // Numa atualização ao vivo, o que mudou (quase sempre pelo Claude, via MCP) acende por alguns segundos.
+  if (before) {
+    const changed = data.tasks.filter((t) => before.get(t.id) !== t.updated_at).map((t) => t.id);
+    if (changed.length && changed.length < 30) {
+      for (const id of changed) state.fresh.add(id);
+      setTimeout(() => { for (const id of changed) state.fresh.delete(id); }, 4200);
+    }
+  }
   emit('data');
   return data;
 }
@@ -96,7 +140,7 @@ export const onUiCommand = (fn) => uiHandlers.add(fn);
 async function reloadIfChanged(version, onChange) {
   if (version === state.version) return;
   if (reloading) return;
-  reloading = load().then(() => onChange?.()).catch(() => {}).finally(() => { reloading = null; });
+  reloading = load({ live: true }).then(() => onChange?.()).catch(() => {}).finally(() => { reloading = null; });
 }
 
 export function startLive(onChange) {
@@ -194,7 +238,7 @@ export function labelFor(tag, project_id) {
 }
 
 export function activeFilterCount() {
-  return [state.prio, state.type, state.assignee, state.due, state.tag].filter(Boolean).length + (state.showSubtasks ? 1 : 0) + (state.showArchived ? 1 : 0);
+  return [state.prio, state.type, state.assignee, state.due, state.tag].filter(Boolean).length + (state.showSubtasks ? 1 : 0) + (state.showArchived ? 1 : 0) + (state.onlyNew ? 1 : 0);
 }
 
 // Aplica sprint, busca e filtros. subtasks: 'filter' (respeita o filtro), 'all' ou 'none'.
@@ -223,6 +267,7 @@ export function filteredTasks({ subtasks = 'filter' } = {}) {
     if (state.due === 'week' && !(t.due_date && t.due_date >= today && t.due_date <= weekEnd)) return false;
     if (state.due === 'none' && t.due_date) return false;
     if (state.tag && !t.tags.some((x) => x.toLowerCase() === state.tag.toLowerCase())) return false;
+    if (state.onlyNew && !isNew(t)) return false;
     if (q && !`#${t.id} ${t.ref || ''} ${t.title} ${t.description} ${t.tags.join(' ')} ${t.project_name}`.toLowerCase().includes(q)) return false;
     return true;
   });

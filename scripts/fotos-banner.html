@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- O banner do README. O scripts/fotos.mjs --banner coloca a foto do quadro ao lado (tela.webp) e fotografa. -->
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Banner</title>
+<style>
+  @font-face { font-family: "Inter"; font-weight: 100 900; src: url("inter.woff2") format("woff2"); }
+  :root { --bg: #141312; --panel: #1b1a18; --border: #2c2a27; --text: #edebe7; --text-2: #b0aca4; --text-3: #8f8a82; --brand: #d97757; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  body { width: 1280px; height: 440px; overflow: hidden; font-family: "Inter", -apple-system, system-ui, sans-serif; color: var(--text); position: relative; }
+  .grid { position: absolute; inset: 0; background: radial-gradient(900px 420px at 18% -20%, rgba(217, 119, 87, 0.16), transparent 70%), radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px) 0 0 / 22px 22px; }
+  .text { position: absolute; left: 64px; top: 0; bottom: 0; width: 520px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+  .mark { display: flex; align-items: center; gap: 14px; }
+  .mark svg { width: 52px; height: 52px; }
+  .mark span { font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+  h1 { margin: 0; font-size: 58px; line-height: 1.02; letter-spacing: -0.035em; font-weight: 700; }
+  h1 em { font-style: normal; color: var(--brand); }
+  p { margin: 0; font-size: 21px; line-height: 1.45; color: var(--text-2); max-width: 470px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chips b { font-weight: 500; font-size: 14px; color: var(--text-2); border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 6px 12px; }
+  .shot { position: absolute; left: 650px; top: 56px; width: 800px; border-radius: 14px; border: 1px solid var(--border); overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 80px rgba(0,0,0,0.6); background: var(--panel); }
+  .shot img { display: block; width: 100%; }
+</style></head>
+<body>
+  <div class="grid"></div>
+  <div class="shot"><img src="tela.webp" alt=""></div>
+  <div class="text">
+    <div class="mark">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#d97757"/><path d="M9 16.5l4.5 4.5L23 11.5" stroke="white" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>claude-tasks</span>
+    </div>
+    <h1>Quadro de Tarefas<em>.</em></h1>
+    <p>O quadro central onde o Claude registra o que ficou pendente em todos os seus projetos.</p>
+    <div class="chips"><b>Kanban</b><b>MCP</b><b>Mapa do código</b><b>Simulação de carga</b></div>
+  </div>
+</body></html>

@@ -79,13 +79,32 @@ export async function stream(path, body, onEvent, signal) {
 }
 
 let toastTimer;
-export function toast(message, error = false) {
+// toast(texto) · toast(texto, true) para erro · toast(texto, { action: { label, run } }) com um botão.
+export function toast(message, options = false) {
+  const { error = false, action = null } = typeof options === 'object' && options ? options : { error: !!options };
   const el = $('#toast');
-  el.textContent = message;
+  // Erros são anunciados na hora pelos leitores de tela; avisos comuns, quando der.
+  el.setAttribute('role', error ? 'alert' : 'status');
+  el.textContent = '';
+  const text = document.createElement('span');
+  text.className = 'toast-msg';
+  text.textContent = message;
+  el.append(text);
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'btn ghost small';
+    b.textContent = action.label;
+    b.onclick = () => { el.classList.remove('show'); action.run(); };
+    el.append(b);
+  }
   el.classList.toggle('error', error);
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), error ? 4200 : 2600);
+  const hide = () => { toastTimer = setTimeout(() => el.classList.remove('show'), error || action ? 5200 : 2600); };
+  hide();
+  // Parado enquanto o mouse ou o foco estão no aviso.
+  el.onmouseenter = el.onfocusin = () => clearTimeout(toastTimer);
+  el.onmouseleave = el.onfocusout = () => { clearTimeout(toastTimer); hide(); };
 }
 
 // Envolve uma ação assíncrona mostrando o erro num toast.

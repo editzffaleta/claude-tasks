@@ -3,7 +3,7 @@ import { api, attempt, toast } from './api.js';
 import { tagChip } from './board.js';
 import { openTask } from './drawer.js';
 import { locale, t, tn } from './i18n.js';
-import { can, canWrite, filteredTasks, load, state, userById } from './state.js';
+import { can, canWrite, filteredTasks, isNew, load, state, userById } from './state.js';
 import { openNewTask } from './taskform.js';
 import { confirmAction, promptText, showMenu } from './ui.js';
 import {
@@ -94,7 +94,7 @@ function row({ x, depth }) {
   const editable = can(x.project_id, 'edit');
   const project = { name: x.project_name, color: x.project_color, avatar: state.projects.find((p) => p.id === x.project_id)?.avatar };
   return `
-    <tr class="${x.status === 'done' ? 'done' : ''} ${x.id === state.taskId ? 'selected' : ''} ${selected.has(x.id) ? 'picked' : ''}" data-id="${x.id}" tabindex="0">
+    <tr class="${x.status === 'done' ? 'done' : ''} ${x.id === state.taskId ? 'selected' : ''} ${selected.has(x.id) ? 'picked' : ''} ${isNew(x) ? 'is-new' : ''} ${state.fresh.has(x.id) ? 'fresh' : ''}" data-id="${x.id}" tabindex="0">
       <td class="c-pick">${editable ? `<input type="checkbox" data-pick="${x.id}" ${selected.has(x.id) ? 'checked' : ''} aria-label="${esc(t('Selecionar {ref}', { ref: taskRef(x) }))}">` : ''}</td>
       <td class="c-check">${editable ? `<button class="check-btn ${x.status === 'done' ? 'on' : ''}" data-toggle="${x.id}" aria-label="${esc(x.status === 'done' ? t('Reabrir {ref}', { ref: taskRef(x) }) : t('Concluir {ref}', { ref: taskRef(x) }))}">${x.status === 'done' ? ICON.check : ''}</button>` : statusIcon(x.status)}</td>
       <td class="c-title">

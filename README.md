@@ -33,8 +33,9 @@
     <img src="docs/imagens/todas-claro.webp" alt="O quadro com as tarefas de quatro projetos, nas colunas A fazer, Em andamento, Bloqueadas e Concluídas" width="100%" />
   </picture>
   <p align="center">
-    <sub>Todas as tarefas de quatro projetos num quadro só. As marcadas com ✱ foram registradas pelo Claude
-    enquanto trabalhava. Todas as imagens deste README usam projetos e pessoas de demonstração.</sub>
+    <sub>Todas as tarefas de quatro projetos num quadro só. A faixa no topo conta o que chegou desde a sua última
+    visita, e os cartões marcados com ✳ Claude foram registrados por ele enquanto trabalhava. Todas as imagens deste
+    README usam projetos e pessoas de demonstração.</sub>
   </p>
 </div>
 
@@ -109,6 +110,17 @@ logado. Ele funciona com a CLI do Claude Code (a sua assinatura), com a API da A
 API compatível com a da OpenAI (OpenRouter, Ollama e outras).
 
 ## Funcionalidades
+
+### O que é novo e o que o Claude fez, à vista
+
+- **Novidades desde a sua última visita:** uma faixa no topo resume "5 tarefas novas desde ontem às 18:40 · 3
+  registradas pelo Claude", com **Ver só as novas** e **Marcar como vistas**. Os cartões novos ganham uma brasa na
+  borda e o selo **Nova** até você abri-los.
+- **O Claude como colega de equipe:** o que ele registrou aparece com "✳ Claude" no cartão e "Registrada pelo
+  Claude" no detalhe.
+- **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o cartão acende
+  e apaga em poucos segundos. Dá para ver o quadro reagir enquanto o Claude trabalha.
+- **Desfazer:** toda mudança de coluna mostra um aviso com **Desfazer**.
 
 ### Visualizações
 
@@ -199,6 +211,16 @@ Além do **Quadro** kanban da imagem do topo, há a página **Atividade**, a lis
 
 CSV (ida e volta), Jira (CSV e API) e Trello (JSON e API), com sincronizações salvas para importar de
 novo com um clique. A exportação em CSV pode ser de um projeto ou de todos, por status.
+
+### Design e acessibilidade
+
+- **Visual "Brasa":** papel grafite quente nos temas claro e escuro, Inter para o texto e JetBrains Mono para
+  códigos e caminhos, servidas pelo próprio painel (funciona offline). O laranja é raro de propósito: quer dizer
+  "aja aqui", "você está aqui", "hoje" ou "o Claude acabou de mexer".
+- **Contraste conferido** (WCAG AA) em todas as superfícies, foco visível, detalhe da tarefa como diálogo acessível,
+  cartões que se movem pelo teclado e respeito ao "reduzir movimento" do sistema.
+- **Celular:** abas numa linha própria, colunas na largura da tela com encaixe, detalhe em tela cheia e diálogos que
+  sobem de baixo.
 
 ### Operação
 
@@ -461,6 +483,9 @@ Cloudflare Tunnel.
 | `/` | Filtrar a visão atual |
 | `C` | Abrir o chat |
 | `1` a `5` | Trocar de visão (Quadro, Lista, Calendário, Gantt, Dashboard) |
+| Setas | No quadro, andar entre os cartões |
+| `Shift` + setas | No quadro, levar o cartão para outra coluna ou posição |
+| `Enter` | Abrir o cartão focado |
 | `Esc` | Fechar o painel ou o diálogo aberto |
 
 ## Dados, backup e privacidade
@@ -487,6 +512,12 @@ npm run mcp          # servidor MCP no terminal
 
 A CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) roda os testes no Node 22 e 24, confere os
 dicionários e a sintaxe do painel e constrói e testa a imagem Docker.
+
+Para testar o painel sem tocar no seu quadro, `node scripts/demo.mjs` sobe um quadro de demonstração (projetos,
+pessoas e tarefas fictícios, com oito semanas de história) numa pasta temporária, na porta 4395. As imagens deste
+README saem dele com `node scripts/fotos.mjs --base http://localhost:4395 --senha <arquivo que o demo mostra> --banner`,
+que fotografa cada tela nos temas claro e escuro com o Chrome sem janela; `--revisao` inclui as telas que não vão
+para o README (login, paleta, nova tarefa, configurações, celular).
 
 ### Variáveis de ambiente
 
@@ -522,10 +553,13 @@ claude-tasks/
 │   ├── importers.js     CSV, Jira e Trello
 │   └── openapi.js       documento OpenAPI 3.1
 ├── public/              o painel: HTML, CSS e módulos JS sem build
+│   ├── styles.css       os tokens da linguagem visual (cores, tipos, movimento) e os componentes
+│   ├── fonts/           Inter e JetBrains Mono, servidas pelo próprio painel
 │   └── js/i18n/         dicionários en, es, fr e de (as chaves são o texto em português)
 ├── mapa/                o plugin Mapa do código (Claude Code e Codex)
 ├── app/macos/           o app para Mac (Swift: AppKit e WebKit) e o build.sh que monta o .app
 ├── bin/                 serviço do launchd e hook de início de sessão
+├── scripts/             conferência das traduções, quadro de demonstração e fotos do README
 ├── test/                testes do quadro (node:test)
 ├── docs/                SISTEMA.md, MCP.md, MAPA.md e as imagens deste README
 ├── Dockerfile · docker-compose.yml
