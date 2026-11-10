@@ -4,7 +4,7 @@ import { api, attempt } from './api.js';
 import { openTask } from './drawer.js';
 import { locale, t, tn } from './i18n.js';
 import { projectById, state, taskById, userById } from './state.js';
-import { $, ICON, ago, avatar, debounce, dtf, esc, eventText, localDate, md, projectBadge } from './util.js';
+import { $, AGENTS, ICON, agentAvatar, agentOf, ago, avatar, debounce, dtf, esc, eventText, localDate, md, projectBadge } from './util.js';
 
 const PAGE = 50;
 const EMPTY = { project: '', who: '', kind: '', since: '', until: '', q: '' };
@@ -66,7 +66,7 @@ function filterControls() {
       ${option('', t('Todas as pessoas'), filters.who)}
       <optgroup label="${esc(t('Pessoas'))}">${people.map((u) => option(`u:${u.id}`, u.name, filters.who)).join('')}</optgroup>
       <optgroup label="${esc(t('Outros'))}">
-        ${option('a:claude', t('Claude'), filters.who)}
+        ${Object.keys(AGENTS).map((a) => option(`a:${a}`, AGENTS[a].name, filters.who)).join('')}
         ${option('a:automação', t('Automações'), filters.who)}
         ${option('a:e-mail', t('E-mail'), filters.who)}
       </optgroup>
@@ -117,7 +117,7 @@ function dayLabel(day) {
 }
 
 function actor(r) {
-  if (r.author === 'claude') return { pic: `<span class="avatar claude">${ICON.claude}</span>`, name: t('Claude') };
+  if (agentOf(r.author)) return { pic: agentAvatar(r.author), name: agentOf(r.author).name };
   if (r.user_id) {
     const u = userById(r.user_id) || { name: r.user_name || t('Alguém') };
     return { pic: avatar(u, { size: 24 }), name: u.name };

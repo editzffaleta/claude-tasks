@@ -51,7 +51,7 @@ const TEMPLATES = [
   { name: N_('Avisar 1 dia antes do prazo'), trigger: 'due_soon', conditions: { days: 1 }, action: { type: 'notify', value: N_('Vence logo: {ref} {titulo} ({prazo})') } },
   { name: N_('Atrasou → label "atrasada"'), trigger: 'overdue', conditions: {}, action: { type: 'add_tag', value: N_('atrasada') } },
   { name: N_('Bug novo → prioridade alta'), trigger: 'task_created', conditions: { type: ['bug'] }, action: { type: 'set_priority', value: 'high' } },
-  { name: N_('Tarefa do Claude → sprint ativa'), trigger: 'task_created', conditions: { by_claude: true }, action: { type: 'move_to_active_sprint' } },
+  { name: N_('Tarefa de um agente → sprint ativa'), trigger: 'task_created', conditions: { by_claude: true }, action: { type: 'move_to_active_sprint' } },
   { name: N_('Sprint terminou → avisar a equipe'), trigger: 'sprint_completed', conditions: {}, action: { type: 'notify', value: N_('A sprint {sprint} de {projeto} terminou') } },
   { name: N_('Concluída → e-mail para quem acompanha'), trigger: 'status_changed', conditions: { to_status: 'done' }, action: { type: 'send_email', to: 'followers', value: N_('{ref} {titulo} foi concluída.') } },
 ];
@@ -66,7 +66,7 @@ function describe(r) {
   if (c.priority?.length) cond.push(t('com prioridade {p}', { p: b(c.priority.map((p) => PRIORITY_LABEL[p]).join('/')) }));
   if (c.type?.length) cond.push(t('do tipo {x}', { x: b(c.type.map((x) => TYPE_LABEL[x]).join('/')) }));
   if (c.tag) cond.push(t('com a label {g}', { g: b(c.tag) }));
-  if (c.by_claude) cond.push(b(t('criada pelo Claude')));
+  if (c.by_claude) cond.push(b(t('criada por um agente')));
   if (r.trigger === 'due_soon') cond.push(`(${tn(c.days ?? 1, '{n} dia antes', '{n} dias antes')})`);
   const a = r.action;
   let value = '';
@@ -174,7 +174,7 @@ async function editor(el, rule = {}) {
           <label class="field"><span>${t('Tipo')}</span><select class="input" name="type">${opt('', t('Qualquer'), c.type?.[0])}${TYPES.map((x) => opt(x, TYPE_LABEL[x], c.type?.[0])).join('')}</select></label>
           <label class="field"><span>${t('Com a label')}</span><input class="input" name="tag" value="${esc(c.tag || '')}"></label>
         </div>
-        <label class="check"><input type="checkbox" name="by_claude" ${c.by_claude ? 'checked' : ''}><span>${t('Só tarefas criadas pelo Claude')}</span></label>
+        <label class="check"><input type="checkbox" name="by_claude" ${c.by_claude ? 'checked' : ''}><span>${t('Só tarefas criadas por um agente (Claude ou Codex)')}</span></label>
         <p class="hint" data-for="sprint_started sprint_completed">${t('Em gatilhos de sprint, as ações de tarefa valem para cada tarefa aberta da sprint.')}</p>
       </fieldset>
       <div class="field-row">

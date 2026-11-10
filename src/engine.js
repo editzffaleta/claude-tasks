@@ -1,6 +1,7 @@
 // Motor de automações e notificações. É ligado em todo processo que grava no banco
 // (painel e MCP), então as regras valem tanto para mudanças suas quanto do Claude.
 import { spawn } from 'node:child_process';
+import { AGENTS, agentName } from './agents.js';
 import { mailEnabled, sendLater } from './mailer.js';
 import { PRIORITY_LABEL, STATUS_LABEL, addDays, today } from './util.js';
 
@@ -24,7 +25,7 @@ function conditionsMatch(rule, task, changes) {
   if (c.priority?.length && !c.priority.includes(task.priority)) return false;
   if (c.type?.length && !c.type.includes(task.type)) return false;
   if (c.tag && !task.tags.includes(c.tag)) return false;
-  if (c.by_claude && task.source !== 'claude') return false;
+  if (c.by_claude && !AGENTS[task.source]) return false;
   if (c.field && changes && !Object.keys(changes).includes(c.field)) return false;
   return true;
 }
@@ -124,7 +125,7 @@ function runSprint(store, trigger, { sprint, actor }) {
 }
 
 function actorName(store, actor) {
-  if (actor?.author === 'claude') return 'Claude';
+  if (agentName(actor?.author)) return agentName(actor.author);
   if (actor?.user_id) return store.user(actor.user_id)?.name || 'Alguém';
   return actor?.author === 'automação' ? 'Uma automação' : 'Alguém';
 }

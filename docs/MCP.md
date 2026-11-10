@@ -1,6 +1,6 @@
 # MCP `tarefas` — Referência completa
 
-> Servidor MCP 4.3.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
+> Servidor MCP 4.4.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
 
 O MCP `tarefas` é a ponte entre o Claude e o quadro central de tarefas. Com ele, o Claude registra, consulta, organiza e conclui tarefas de **qualquer projeto**, gerencia sprints, colunas, fluxos, labels, campos, membros, workspaces, automações e caixas de entrada, controla tempo, lê anexos, cria links públicos, importa e exporta tarefas e gera relatórios. Tudo vai para o mesmo banco do painel (http://localhost:4317).
 
@@ -63,6 +63,14 @@ claude mcp add --scope user tarefas \
 ```
 
 > Use o caminho absoluto do `node`. Apps de interface (como o Claude Desktop) nem sempre têm `~/.local/bin` ou o nvm no `PATH`.
+
+**No Codex**, o mesmo servidor é registrado assim (vale para a CLI e para o app):
+
+```bash
+codex mcp add tarefas -- "$(command -v node)" --no-warnings ~/Developer/claude-tasks/src/mcp.js
+```
+
+A instrução global do Codex fica em `~/.codex/AGENTS.md`. O que ele grava aparece no painel com o selo "Codex" (veja Autoria, em 4.3). No teste com o Codex 0.144, ele pediu ao servidor só a lista de ferramentas: os prompts (`/mcp__tarefas__…`) não aparecem nele, e o hook SessionStart é do Claude Code.
 
 ### 2.2 Verificar
 
@@ -278,7 +286,7 @@ Toda ferramenta que trabalha com projeto aceita:
 - **Fluxo:** se o projeto tem transições cadastradas, mudar a coluna ou o status para um destino fora do fluxo falha com `Transição não permitida: … só pode ir para: …`. `get_task` mostra para onde a tarefa pode ir.
 - **Prioridade e ordem:** mudar a prioridade reposiciona a tarefa na faixa dela. `position: top|bottom` move para o topo ou o fim da coluna.
 - **Transações:** cada chamada é atômica; se um item falha, nada daquela chamada é gravado.
-- **Autoria:** tudo que o MCP faz fica registrado como **Claude** no histórico. As tarefas criadas recebem `source = claude`, o que alimenta o selo ✳ no painel e o indicador "Registradas pelo Claude". No chat do painel com provedor compatível com OpenAI, o autor é `ia`.
+- **Autoria:** tudo que o MCP faz fica registrado com o nome do agente conectado. O servidor lê o `clientInfo` do `initialize`: um cliente com "codex" no nome ou no título grava como **Codex** (`source = codex`), e qualquer outro grava como **Claude** (`source = claude`). Isso vale para tarefas, notas, tempo e avisos, e alimenta o selo do agente no painel ("✳ Claude" ou "Codex") e o indicador "Registradas pelo Claude". No chat do painel com provedor compatível com OpenAI, o autor é `ia`.
 - **Automações e notificações:** mudanças do Claude disparam as regras do quadro, e comentários com `@Nome` notificam as pessoas citadas.
 
 ### 4.4 Formato das tarefas nas respostas
@@ -1556,7 +1564,7 @@ As mensagens de erro são em português e dizem o que fazer. Por exemplo: `Colun
 
 | Método | Resposta |
 | --- | --- |
-| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.3.0, título "Quadro de tarefas"), `instructions` |
+| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.4.0, título "Quadro de tarefas"), `instructions` |
 | `notifications/initialized` | (notificação, sem resposta) |
 | `ping` | `{}` |
 | `tools/list` | `tools[]` com `name`, `title`, `description`, `inputSchema`, `annotations` |
@@ -1647,6 +1655,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 
 | Versão | Mudanças |
 | --- | --- |
+| **4.4** (Codex) | O servidor reconhece o agente pelo `clientInfo` do `initialize`: o que o Codex grava sai como `codex` (tarefas, notas, tempo e avisos), e não mais como `claude`. A condição `by_claude` das automações vale para os dois agentes. `get_overview` conta as tarefas criadas por cada um. |
 | **4.3** (Resolver tarefa) | +1 prompt: `resolver`, que pega uma tarefa específica pelo número ou pelo código. Os prompts `concluir` e `quebrar_tarefa` passam a entender o código do projeto (`WEB-12`); antes ele era lido como o número geral 12. |
 | **4.2** (Simulação no Breakscale) | `code_map` ganha `action: "simulacao"` (a última simulação de carga: cenários, gargalos, premissas e link), e o `status` cita a simulação. |
 | **4.1** (Mapa do código) | +1 ferramenta: `code_map` (situação, visão geral, busca, detalhe e caminho no mapa do código de um projeto, feito pelo plugin `mapa-do-codigo`). `show_in_dashboard` aceita `view: "mapa"`. |

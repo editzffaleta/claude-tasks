@@ -122,7 +122,7 @@ const NOTIFY_LABEL = /* i18n */ {
   due: 'Prazo chegando',
   overdue: 'Prazo vencido',
   automation: 'Avisos de automações',
-  claude: 'Avisos do Claude',
+  claude: 'Avisos do Claude e do Codex',
   system: 'Avisos do sistema',
 };
 const VIEWS = /* i18n */ { board: 'Quadro', list: 'Lista', calendar: 'Calendário', gantt: 'Gantt', dashboard: 'Dashboard' };

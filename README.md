@@ -21,7 +21,7 @@
   <a href="https://github.com/editzffaleta/claude-tasks/actions/workflows/ci.yml"><img src="https://github.com/editzffaleta/claude-tasks/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licença-MIT-blue.svg" alt="Licença MIT" /></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen.svg" alt="Node 22.13 ou mais novo" />
-  <img src="https://img.shields.io/badge/MCP-4.3%20%C2%B7%2036%20ferramentas-8a63d2.svg" alt="MCP 4.3 com 36 ferramentas" />
+  <img src="https://img.shields.io/badge/MCP-4.4%20%C2%B7%2036%20ferramentas-8a63d2.svg" alt="MCP 4.4 com 36 ferramentas" />
   <img src="https://img.shields.io/badge/dependências-zero-success.svg" alt="Sem dependências obrigatórias" />
   <img src="https://img.shields.io/badge/idiomas-5-orange.svg" alt="5 idiomas" />
   <a href="#contribuindo"><img src="https://img.shields.io/badge/PRs-bem--vindos-brightgreen.svg" alt="PRs bem-vindos" /></a>
@@ -101,6 +101,9 @@ Para mandar o Claude resolver uma tarefa que já está no quadro, abra a tarefa 
 **Mandar para o Claude**: o pedido vai para a área de transferência, pronto para colar numa sessão
 aberta na pasta do projeto. Numa sessão, `/mcp__tarefas__resolver 28` faz o mesmo pelo número.
 
+O **Codex** usa o mesmo quadro: registre o servidor nele (veja [Instalação](#instalação)) e o que ele
+gravar aparece com o selo "Codex". No menu `⋯` da tarefa, **Mandar para o Codex** copia o mesmo pedido.
+
 ### No navegador ou no app do Mac
 
 O painel em http://localhost:4317 (ou no [app para Mac](#app-para-mac), com ícone próprio no Dock) mostra tudo ao vivo: o que o Claude grava aparece em menos de um
@@ -130,7 +133,7 @@ API compatível com a da OpenAI (OpenRouter, Ollama e outras).
   </picture>
 
 - **O Claude como colega de equipe:** o que ele registrou aparece com "✳ Claude" no cartão e "Registrada pelo
-  Claude" no detalhe.
+  Claude" no detalhe. O que o Codex registrou aparece com o selo "Codex".
 - **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o cartão acende
   e apaga em poucos segundos. Dá para ver o quadro reagir enquanto o Claude trabalha.
 - **Desfazer:** toda mudança de coluna mostra um aviso com **Desfazer**.
@@ -297,7 +300,7 @@ ligações das peças, nunca o código. Detalhes em [docs/MAPA.md § 7.7](docs/M
 
 ## O servidor MCP
 
-O servidor MCP `tarefas` (versão 4.3, transporte stdio) tem **36 ferramentas**, **10 prompts** e
+O servidor MCP `tarefas` (versão 4.4, transporte stdio) tem **36 ferramentas**, **10 prompts** e
 resources de leitura. Ele aceita os protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25.
 
 | Grupo | Ferramentas |
@@ -369,6 +372,9 @@ git clone https://github.com/editzffaleta/claude-tasks.git ~/Developer/claude-ta
 # 2. Deixe o MCP disponível em todos os projetos
 claude mcp add --scope user tarefas -- "$(command -v node)" --no-warnings ~/Developer/claude-tasks/src/mcp.js
 
+# (Opcional) O mesmo para o Codex
+codex mcp add tarefas -- "$(command -v node)" --no-warnings ~/Developer/claude-tasks/src/mcp.js
+
 # 3. Deixe o painel sempre ligado (inicia no login)
 ~/Developer/claude-tasks/bin/service.sh install
 ```
@@ -387,6 +393,8 @@ Depois:
    pergunte antes; avise numa linha. Antes de criar, confira `list_tasks` para não duplicar. Ao começar
    uma tarefa do quadro, mude para `doing`; ao terminar, use `complete_tasks` com uma nota curta.
    ```
+
+   No Codex, a mesma instrução vai em `~/.codex/AGENTS.md`.
 
 3. (Opcional) Chat do painel: rode `claude` no Terminal e faça `/login`, ou configure a API da Anthropic
    (`npm install` traz o SDK) ou uma API compatível com a OpenAI em **Configurações → IA do chat**.
@@ -521,7 +529,7 @@ Os atalhos de uma tecla podem ser desligados em **Minha conta → Preferências*
 
 ```bash
 npm start            # painel em http://localhost:4317
-npm test             # 251 testes: API, MCP, permissões, e-mail, mapa e o plugin do mapa
+npm test             # 259 testes: API, MCP, permissões, e-mail, mapa e o plugin do mapa
 npm run i18n:check   # confere os dicionários dos idiomas do painel
 npm run mcp          # servidor MCP no terminal
 ```

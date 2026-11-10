@@ -3,7 +3,7 @@
 import { LANGUAGES, pickLanguage, setLanguage, t, tn } from './i18n.js';
 import {
   $, COLUMN_LABEL, ICON, PRIORITY_LABEL, PROJECT_STATUS_LABEL, STATUS_LABEL, STATUSES, TYPE_LABEL,
-  ago, avatar, columnLabel, dtf, dueInfo, esc, fmtDate, fmtNumber, localDate, md, prioIcon, projectColor, statusIcon, typeIcon,
+  agentAvatar, agentByName, ago, avatar, columnLabel, dtf, dueInfo, esc, fmtDate, fmtNumber, localDate, md, prioIcon, projectColor, statusIcon, typeIcon,
 } from './util.js';
 
 const root = $('#share');
@@ -25,7 +25,7 @@ function fmtBytes(n) {
 }
 
 function person(name, size = 22) {
-  if (name === 'Claude') return `<span class="avatar claude" style="--s:${size}px" title="Claude">${ICON.claude}</span>`;
+  if (agentByName(name)) return agentAvatar(agentByName(name), { size });
   return avatar({ name }, { size });
 }
 

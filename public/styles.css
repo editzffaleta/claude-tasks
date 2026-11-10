@@ -448,8 +448,10 @@ body.chat-open .app { grid-template-columns: var(--sidebar) minmax(0, 1fr) var(-
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--text-3)) 30%, transparent);
 }
 img.avatar { object-fit: cover; background: var(--panel-2); }
-.avatar.claude { background: var(--accent-weak); color: var(--accent-ink); --s: 24px; box-shadow: none; }
-.avatar.claude svg { width: 13px; height: 13px; }
+/* Agentes: o Claude usa a cor de destaque; o Codex fica neutro, para os dois não se confundirem. */
+.avatar.claude, .avatar.codex { background: var(--accent-weak); color: var(--accent-ink); --s: 24px; box-shadow: none; }
+.avatar.codex { background: var(--panel-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--border); }
+.avatar.claude svg, .avatar.codex svg { width: 13px; height: 13px; }
 .avatar.claude.big { --s: 44px; }
 .avatar.claude.big svg { width: 22px; height: 22px; }
 .avatars { display: inline-flex; align-items: center; }
@@ -650,7 +652,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.012em; whi
 .meta-icon.over, .over { color: var(--critical); }
 .by { display: inline-flex; align-items: center; gap: 4px; color: var(--text-3); }
 .by svg { width: 12px; height: 12px; }
-.by.claude { color: var(--accent-ink); font-size: 11.5px; font-weight: 600; }
+.by.claude, .by.codex { color: var(--accent-ink); font-size: 11.5px; font-weight: 600; }
+.by.codex { color: var(--text-2); }
 .new-pill { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--accent-weak); color: var(--accent-ink); font-size: 10.5px; font-weight: 650; letter-spacing: 0.01em; }
 .new-pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 
@@ -1041,7 +1044,8 @@ td.c-points, td.c-time, td.c-due { font-variant-numeric: tabular-nums; }
   min-width: 0;
 }
 .drawer-head .type-icon svg { width: 15px; height: 15px; }
-.drawer-head .by.claude { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--accent-weak); white-space: nowrap; }
+.drawer-head .by.claude, .drawer-head .by.codex { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--accent-weak); white-space: nowrap; }
+.drawer-head .by.codex { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); }
 /* Quando falta espaço, o código da tarefa fica inteiro e os nomes encurtam com reticências:
    primeiro o da tarefa-mãe e, só se ainda faltar, o do projeto. */
 .drawer-head .tid { flex: none; white-space: nowrap; }
@@ -1162,7 +1166,7 @@ td.c-points, td.c-time, td.c-due { font-variant-numeric: tabular-nums; }
 .timeline { display: grid; gap: 14px; margin-bottom: 12px; }
 .note { display: grid; grid-template-columns: 24px 1fr; gap: 10px; }
 .note .avatar { --s: 24px; }
-.note .avatar.claude { --s: 24px; }
+.note .avatar.claude, .note .avatar.codex { --s: 24px; }
 .avatar-dot { width: 24px; display: grid; place-items: center; color: var(--text-3); }
 .note-meta { font-size: 12px; color: var(--text-3); }
 .note-meta b { color: var(--text-2); font-weight: 600; }

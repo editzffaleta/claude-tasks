@@ -3,13 +3,15 @@ import {
   BOARD_URL, COLUMN_NAME, DEPENDENCY_LABEL, PRIORITY_LABEL, STATUS_LABEL, Store,
   describeRecurrence, formatDuration, formatTask, today,
 } from '../db.js';
+import { agentName } from '../agents.js';
 import { attachEngine } from '../engine.js';
 
 export const store = new Store();
 attachEngine(store);
 
-// Autor das mudanças (o chat do painel com outro provedor troca para "ia" durante a execução).
-export const CLAUDE = { author: 'claude' };
+// Agente que está escrevendo. O cliente MCP diz quem é no initialize (Claude ou Codex), e o chat
+// do painel com outro provedor troca para "ia" durante a execução.
+export const AGENT = { author: 'claude' };
 
 // Pessoa conversando no chat do painel (provedores de API rodam as ferramentas aqui dentro).
 let currentUser = null;
@@ -48,8 +50,8 @@ export function guardAdmin() {
   if (user && user.role !== 'admin') throw new Error('Só administradores podem fazer isso');
 }
 
-// Tempo registrado pelo Claude conta para a pessoa que está usando ele.
-export const timeActor = () => ({ author: 'claude', user_id: me()?.id ?? null });
+// Tempo registrado pelo agente conta para a pessoa que está usando ele.
+export const timeActor = () => ({ author: AGENT.author, user_id: me()?.id ?? null });
 
 export const boardLink = (project) => (project ? `${BOARD_URL}/?project=${project.id}` : BOARD_URL);
 export const taskLink = (id) => `${BOARD_URL}/?task=${id}`;
@@ -163,7 +165,7 @@ export function describeTask(t) {
   if (t.time_entries?.length) {
     lines.push('', 'Tempo registrado:', ...t.time_entries.slice(0, 10).map((e) => `- ${e.started_at.slice(0, 10)} ${e.user_name || e.author}: ${e.ended_at ? formatDuration(e.minutes) : 'rodando'}${e.note ? ` — ${e.note}` : ''}`));
   }
-  const notes = (t.notes || []).map((n) => `${n.parent_id ? '  ↳ ' : '- '}${n.created_at.slice(0, 16).replace('T', ' ')} ${n.author === 'claude' ? 'Claude' : n.user_name || n.author}${n.kind === 'note' ? ` [comentário ${n.id}${n.edited_at ? ', editado' : ''}]` : ''}${n.kind === 'event' ? ' ·' : ':'} ${n.body}`);
+  const notes = (t.notes || []).map((n) => `${n.parent_id ? '  ↳ ' : '- '}${n.created_at.slice(0, 16).replace('T', ' ')} ${agentName(n.author) || n.user_name || n.author}${n.kind === 'note' ? ` [comentário ${n.id}${n.edited_at ? ', editado' : ''}]` : ''}${n.kind === 'event' ? ' ·' : ':'} ${n.body}`);
   if (notes.length) lines.push('', 'Histórico:', ...notes);
   return lines.join('\n');
 }
@@ -196,7 +198,7 @@ export function overviewText(project) {
     `Hoje: ${today()}`,
     '',
     `Abertas: ${t.open} (${t.doing} em andamento, ${t.blocked} bloqueadas) · Atrasadas: ${t.overdue} · Vencem em 7 dias: ${t.due_week}`,
-    `Últimos 7 dias: ${t.done_7d} concluídas, ${t.created_7d} criadas (${t.claude_7d} pelo Claude), ${formatDuration(t.minutes_7d)} registradas`,
+    `Últimos 7 dias: ${t.done_7d} concluídas, ${t.created_7d} criadas (${t.claude_7d} pelo Claude${t.codex_7d ? `, ${t.codex_7d} pelo Codex` : ''}), ${formatDuration(t.minutes_7d)} registradas`,
   ];
   if (!project && s.byProject.length) {
     lines.push('', '## Por projeto', ...s.byProject.sort((a, b) => b.open - a.open)

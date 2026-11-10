@@ -5,7 +5,7 @@ import { t, tn } from './i18n.js';
 import { state, filteredTasks, load, userById, currentProject, can, canWrite, labelFor, isNew } from './state.js';
 import { openNewTask } from './taskform.js';
 import {
-  $, $$, COLUMN_LABEL, ICON, STATUSES, avatar, columnLabel, dueInfo, esc, fmtDuration, fmtNumber, prioIcon, projectBadge, statusIcon, taskRef, typeIcon,
+  $, $$, COLUMN_LABEL, ICON, STATUSES, agentBadge, avatar, columnLabel, dueInfo, esc, fmtDuration, fmtNumber, prioIcon, projectBadge, statusIcon, taskRef, typeIcon,
 } from './util.js';
 
 let drag = null;
@@ -49,7 +49,7 @@ export function cardHtml(x, { showProject = !state.projectId } = {}) {
         ${x.recurrence ? `<span class="flag" title="${esc(t('Recorrente'))}">${ICON.repeat}</span>` : ''}
         <span class="spacer"></span>
         ${fresh ? `<span class="new-pill" title="${esc(t('Criada depois da sua última visita'))}">${t('Nova')}</span>` : ''}
-        ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Criada pelo Claude'))}">${ICON.claude}${t('Claude')}</span>` : ''}
+        ${agentBadge(x.source, (agent) => t('Criada pelo {agent}', { agent }))}
         ${x.source === 'e-mail' ? `<span class="by" title="${esc(t('Criada por e-mail'))}">${ICON.mail}</span>` : ''}
         ${people.length ? `<span class="avatars">${people.slice(0, 2).map((u) => avatar(u, { size: 20 })).join('')}${people.length > 2 ? `<span class="more-people" title="${esc(people.slice(2).map((u) => u.name).join(', '))}">+${people.length - 2}</span>` : ''}</span>` : ''}
       </div>

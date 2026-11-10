@@ -1,4 +1,5 @@
 // Configurações, estatísticas do dashboard, relatório de tempo, atividade, automações e chat.
+import { agentName, agentNameSql } from '../agents.js';
 import {
   ACTIONS, MESSAGE_ACTIONS, PRIORITIES, SPRINT_TRIGGERS, STATUSES, TRIGGERS, TYPES,
   addDays, cleanEnum, cleanText, fail, localDate, now, today,
@@ -118,10 +119,11 @@ export const insightMethods = {
              COUNT(CASE WHEN status = 'done' AND completed_at >= ? THEN 1 END) AS done_7d,
              COUNT(CASE WHEN created_at >= ? THEN 1 END) AS created_7d,
              COUNT(CASE WHEN created_at >= ? AND source = 'claude' THEN 1 END) AS claude_7d,
+             COUNT(CASE WHEN created_at >= ? AND source = 'codex' THEN 1 END) AS codex_7d,
              COUNT(CASE WHEN type = 'bug' AND status != 'done' THEN 1 END) AS open_bugs,
              COALESCE(SUM(CASE WHEN status != 'done' THEN story_points END), 0) AS open_points,
              COUNT(*) AS total
-      FROM tasks t WHERE archived_at IS NULL ${scope}`).get(d, d, addDays(d, 7), weekAgo, weekAgo, weekAgo, ...args);
+      FROM tasks t WHERE archived_at IS NULL ${scope}`).get(d, d, addDays(d, 7), weekAgo, weekAgo, weekAgo, weekAgo, ...args);
 
     totals.minutes_7d = this.db.prepare(`
       SELECT COALESCE(SUM(COALESCE(e.minutes, (unixepoch('now') - unixepoch(e.started_at)) / 60)), 0) AS m
@@ -174,7 +176,7 @@ export const insightMethods = {
       FROM users u JOIN assignees a ON a.user_id = u.id JOIN tasks t ON t.id = a.task_id
       WHERE t.archived_at IS NULL AND t.status != 'done' ${scope} GROUP BY u.id ORDER BY COUNT(*) DESC`).all(d, ...args);
     const utilization = this.db.prepare(`
-      SELECT u.id AS user_id, COALESCE(u.name, CASE e.author WHEN 'claude' THEN 'Claude' ELSE e.author END) AS name,
+      SELECT u.id AS user_id, COALESCE(u.name, ${agentNameSql('e.author')}) AS name,
         SUM(COALESCE(e.minutes, (unixepoch('now') - unixepoch(e.started_at)) / 60)) AS minutes
       FROM time_entries e JOIN tasks t ON t.id = e.task_id LEFT JOIN users u ON u.id = e.user_id
       WHERE e.started_at >= ? ${scope} GROUP BY 2 ORDER BY minutes DESC LIMIT 12`).all(monthAgo, ...args);
@@ -247,7 +249,7 @@ export const insightMethods = {
       task: (e) => [`#${e.task_id}`, `#${e.task_id} ${e.title} (${e.project_name})`],
       project: (e) => [String(e.project_id), e.project_name],
       day: (e) => [e.day, e.day],
-      person: (e) => [e.user_name || e.author, e.user_name || (e.author === 'claude' ? 'Claude' : e.author)],
+      person: (e) => [e.user_name || e.author, e.user_name || agentName(e.author) || e.author],
     }[group_by];
     if (!keyOf) fail('"group_by" deve ser task, project, day ou person');
     const groups = new Map();

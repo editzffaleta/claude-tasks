@@ -2,13 +2,14 @@
 // anotações (dicas para o cliente) e run(args) → texto ou { content: [...] }.
 import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
+import { AGENTS, agentName } from '../agents.js';
 import {
   ACTIONS, DEPENDENCY_TYPES, FREQS, PRIORITIES, PRIORITY_LABEL, PROJECT_STATUSES, STATUSES, STATUS_LABEL, TRIGGERS, TYPES,
   VISIBILITIES, cleanDate, cleanId, formatDuration, formatTask, today,
 } from '../db.js';
 import { DEFAULT_SETTINGS } from '../store/insights.js';
 import {
-  CLAUDE, actingUser, boardLink, describeTask, guardAdmin, guardProject, guardTask, me, overviewText, projectFrom, requireProject,
+  AGENT, actingUser, boardLink, describeTask, guardAdmin, guardProject, guardTask, me, overviewText, projectFrom, requireProject,
   store, taskJson, taskLink, timeActor, userIds, visible,
 } from './context.js';
 import { EXTRA_TOOLS } from './tools-extra.js';
@@ -127,14 +128,14 @@ function reposition(id, position) {
     .filter((x) => x.id !== id && (x.column_id ?? null) === (t.column_id ?? null));
   if (!same.length) return;
   const ranks = same.map((x) => x.sort_rank);
-  store.updateTask(id, { rank: position === 'top' ? Math.min(...ranks) - 1000 : Math.max(...ranks) + 1000 }, CLAUDE);
+  store.updateTask(id, { rank: position === 'top' ? Math.min(...ranks) - 1000 : Math.max(...ranks) + 1000 }, AGENT);
 }
 
 function applyEdit(id, args) {
   const current = requireTask(id, 'edit');
-  store.updateTask(current.id, buildPatch(args, current), CLAUDE);
+  store.updateTask(current.id, buildPatch(args, current), AGENT);
   if (args.position) reposition(current.id, args.position);
-  if (args.note) store.addNote(current.id, args.note, CLAUDE);
+  if (args.note) store.addNote(current.id, args.note, AGENT);
   return store.task(current.id);
 }
 
@@ -149,7 +150,7 @@ function describeAutomation(r) {
     c.priority?.length && `prioridade ${c.priority.join('/')}`,
     c.type?.length && `tipo ${c.type.join('/')}`,
     c.tag && `tag ${c.tag}`,
-    c.by_claude && 'criada pelo Claude',
+    c.by_claude && 'criada por um agente (Claude ou Codex)',
     r.trigger === 'due_soon' && `${c.days ?? 1} dia(s) antes`,
   ].filter(Boolean).join(', ');
   const { type, value } = r.action;
@@ -198,7 +199,7 @@ export const TOOLS = {
             watchers: item.watchers ? userIds(item.watchers) : undefined,
             reporter: item.reporter ? userIds([item.reporter])[0] : (me()?.id ?? undefined),
           };
-          const { task, duplicate } = store.addTask(project.id, input, CLAUDE);
+          const { task, duplicate } = store.addTask(project.id, input, AGENT);
           return `${duplicate ? 'já existia' : 'criada'}: ${formatTask(task)}`;
         });
         return [`Projeto: ${project.name}`, ...lines, `Quadro: ${boardLink(project)}`].join('\n');
@@ -288,7 +289,7 @@ export const TOOLS = {
           blocking: t.blocking,
           attachments: t.attachments.map(({ id: aid, name, mime, size, created_at }) => ({ id: aid, name, mime, size, created_at })),
           time_entries: t.time_entries,
-          notes: t.notes.map(({ kind, author, user_name, body, created_at }) => ({ kind, author: author === 'claude' ? 'claude' : user_name || author, body, created_at })),
+          notes: t.notes.map(({ kind, author, user_name, body, created_at }) => ({ kind, author: AGENTS[author] ? author : user_name || author, body, created_at })),
         });
       }
       return describeTask(t);
@@ -358,8 +359,8 @@ export const TOOLS = {
         const id = requireTask(raw, 'edit').id;
         store.stopTaskTimers(id, timeActor());
         if (args.time_spent) store.logTime(id, { duration: args.time_spent, note: args.note }, timeActor());
-        const t = store.updateTask(id, { status: 'done' }, CLAUDE);
-        if (args.note) store.addNote(id, args.note, CLAUDE);
+        const t = store.updateTask(id, { status: 'done' }, AGENT);
+        if (args.note) store.addNote(id, args.note, AGENT);
         const next = t.recurrence_next_id ? ` → próxima ocorrência #${t.recurrence_next_id}` : '';
         return `concluída: ${formatTask(store.task(id), { withProject: true })}${next}`;
       }).join('\n'));
@@ -399,7 +400,7 @@ export const TOOLS = {
     },
     run({ id, body, reply_to }) {
       const t = requireTask(id, 'edit');
-      store.addNote(t.id, body, CLAUDE, { parent_id: reply_to });
+      store.addNote(t.id, body, AGENT, { parent_id: reply_to });
       return `Comentário adicionado em #${t.id} ${t.title}.`;
     },
   },
@@ -456,7 +457,7 @@ export const TOOLS = {
       };
       if (args.action === 'create') {
         if (actingUser()?.role === 'viewer') throw new Error('Visualizadores não criam projetos');
-        const p = store.createProject(args.name, null, { ...fields, actor: CLAUDE });
+        const p = store.createProject(args.name, null, { ...fields, actor: AGENT });
         return `Projeto criado: [${p.id}] ${p.name}${p.key ? ` (${p.key})` : ''} · ${boardLink(p)}`;
       }
       const p = projectFrom(args, { create: false }) || requireProject(args, { create: false, level: 'manage' });
@@ -583,13 +584,13 @@ export const TOOLS = {
         }
         case 'create': return `Criada: ${fmt(store.createSprint(project.id, args))}`;
         case 'update': return `Atualizada: ${fmt(store.updateSprint(cleanId(args.id), args))}`;
-        case 'start': return `Iniciada: ${fmt(store.startSprint(cleanId(args.id), CLAUDE))}`;
+        case 'start': return `Iniciada: ${fmt(store.startSprint(cleanId(args.id), AGENT))}`;
         case 'complete': {
-          const r = store.completeSprint(cleanId(args.id), { move_to: args.move_to }, CLAUDE);
+          const r = store.completeSprint(cleanId(args.id), { move_to: args.move_to }, AGENT);
           return `Concluída: ${fmt(r.sprint)}. ${r.moved} tarefa(s) pendente(s) movida(s) para ${r.moved_to ? r.moved_to.name : 'o backlog'}.`;
         }
         case 'cancel': {
-          const r = store.cancelSprint(cleanId(args.id), { move_to: args.move_to }, CLAUDE);
+          const r = store.cancelSprint(cleanId(args.id), { move_to: args.move_to }, AGENT);
           return `Cancelada: ${fmt(r.sprint)}. ${r.moved} tarefa(s) movida(s) para ${r.moved_to ? r.moved_to.name : 'o backlog'}.`;
         }
         case 'delete': store.deleteSprint(cleanId(args.id)); return 'Sprint excluída (as tarefas foram para o backlog).';
@@ -693,7 +694,7 @@ export const TOOLS = {
       required: ['id', 'path'],
     },
     run(args) {
-      const a = store.attachFile(requireTask(args.id, 'edit').id, args.path, CLAUDE, args.name);
+      const a = store.attachFile(requireTask(args.id, 'edit').id, args.path, AGENT, args.name);
       return `Anexado em #${args.id}: ${a.name} (id ${a.id}, ${Math.ceil(a.size / 1024)} KB).`;
     },
   },
@@ -756,7 +757,7 @@ export const TOOLS = {
       if (since) items = items.filter((a) => a.created_at.slice(0, 10) >= since).slice(0, args.limit || 30);
       if (!items.length) return 'Nenhuma atividade.';
       return items.map((a) => {
-        const who = a.author === 'claude' ? 'Claude' : a.user_name || a.author;
+        const who = agentName(a.author) || a.user_name || a.author;
         const what = a.kind === 'created' ? 'criou' : a.kind === 'note' ? `comentou ("${a.body.slice(0, 80)}${a.body.length > 80 ? '…' : ''}") em` : `${a.body} em`;
         return `${a.created_at.slice(0, 16).replace('T', ' ')} · ${who} ${what} #${a.task_id} ${a.title} (${a.project_name})`;
       }).join('\n');
@@ -795,7 +796,7 @@ export const TOOLS = {
     run(args) {
       if (args.task_id) requireTask(args.task_id);
       if (actingUser()?.role === 'viewer') throw new Error('Visualizadores não enviam notificações');
-      const n = store.notify({ user_ids: args.to?.length ? userIds(args.to) : null, task_id: args.task_id ?? null, body: `Claude: ${args.message}`, type: 'claude' });
+      const n = store.notify({ user_ids: args.to?.length ? userIds(args.to) : null, task_id: args.task_id ?? null, body: `${agentName(AGENT.author) || 'Claude'}: ${args.message}`, type: 'claude' });
       return `Notificação enviada (${n} destinatário(s)).`;
     },
   },
@@ -847,7 +848,7 @@ export const TOOLS = {
             priority: { type: 'array', items: { type: 'string', enum: PRIORITIES } },
             type: { type: 'array', items: { type: 'string', enum: TYPES } },
             tag: { type: 'string' },
-            by_claude: { type: 'boolean', description: 'Only tasks created by Claude.' },
+            by_claude: { type: 'boolean', description: 'Only tasks created by an agent through this server (Claude or Codex).' },
             days: { type: 'integer', description: 'due_soon: how many days before the deadline. Default 1.' },
             field: { type: 'string', description: 'task_updated: only when this task column changed, e.g. status, priority, due_date, tags, story_points, sprint_id, column_id, reporter_id (assignee changes use the "assigned" trigger).' },
           },

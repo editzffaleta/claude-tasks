@@ -633,7 +633,7 @@ const schemas = {
   // ----- dashboard -----
   Stats: obj({
     totals: obj({
-      open: int, doing: int, blocked: int, overdue: int, due_week: int, done_7d: int, created_7d: int, claude_7d: int, open_bugs: int,
+      open: int, doing: int, blocked: int, overdue: int, due_week: int, done_7d: int, created_7d: int, claude_7d: int, codex_7d: int, open_bugs: int,
       open_points: num, total: int, minutes_7d: int,
     }),
     weeks: arr(obj({ week: d(date, 'Segunda-feira'), created: int, done: int, bugs_created: int, bugs_done: int }), 'Últimas 8 semanas'),

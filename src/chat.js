@@ -46,8 +46,8 @@ async function inProcessTools(user) {
     async run(name, args, author) {
       const tool = TOOLS[name];
       if (!tool) return { content: [{ type: 'text', text: `Erro: ferramenta desconhecida ${name}` }], isError: true };
-      const previous = ctx.CLAUDE.author;
-      ctx.CLAUDE.author = author;
+      const previous = ctx.AGENT.author;
+      ctx.AGENT.author = author;
       ctx.setCurrentUser(user);
       try {
         const out = await tool.run(args || {});
@@ -55,7 +55,7 @@ async function inProcessTools(user) {
       } catch (e) {
         return { content: [{ type: 'text', text: `Erro: ${e.message}` }], isError: true };
       } finally {
-        ctx.CLAUDE.author = previous;
+        ctx.AGENT.author = previous;
         ctx.setCurrentUser(null);
       }
     },
