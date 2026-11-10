@@ -1,5 +1,6 @@
 // Prompts do MCP. No Claude Code viram comandos: /mcp__tarefas__<nome>.
 // Cada prompt já embute os dados do quadro que importam, para o Claude começar sem consultas extras.
+import { agentName } from '../agents.js';
 import { addDays, formatDuration, formatTask, today } from '../db.js';
 import { describeTask, overviewText, projectBoard, store, visible } from './context.js';
 
@@ -230,7 +231,7 @@ ${done.map((t) => `- ${formatTask(t, { withProject: !p })}`).join('\n') || '(nen
 ${time.groups.map((g) => `- ${g.label}: ${formatDuration(g.minutes)}`).join('\n') || '(nenhum)'}
 
 ## Atividade (${activity.length} eventos)
-${activity.slice(0, 80).map((a) => `- ${a.created_at.slice(0, 10)} ${a.author === 'claude' ? 'Claude' : a.user_name || a.author}: ${a.kind === 'created' ? 'criou' : a.kind === 'note' ? 'comentou em' : a.body} #${a.task_id} ${a.title}`).join('\n')}
+${activity.slice(0, 80).map((a) => `- ${a.created_at.slice(0, 10)} ${agentName(a.author) || a.user_name || a.author}: ${a.kind === 'created' ? 'criou' : a.kind === 'note' ? 'comentou em' : a.body} #${a.task_id} ${a.title}`).join('\n')}
 
 ${overviewText(p)}`;
     },

@@ -5,7 +5,7 @@ import { api } from './api.js';
 import { openTask } from './drawer.js';
 import { t, tn } from './i18n.js';
 import { emit, load, markSeen, state, subscribe, taskById, triageable } from './state.js';
-import { ICON, PRIORITIES, PRIORITY_LABEL, TYPE_LABEL, ago, esc, md, prioIcon, projectBadge, taskRef, typeIcon } from './util.js';
+import { ICON, PRIORITIES, PRIORITY_LABEL, TYPE_LABEL, agentOf, ago, esc, md, prioIcon, projectBadge, taskRef, typeIcon } from './util.js';
 
 let dialog = null;
 let queue = [];
@@ -64,7 +64,7 @@ function taskHtml(x) {
         ${x.project_name ? `<span class="triage-project">${projectBadge(state.projects.find((p) => p.id === x.project_id) || {})}${esc(x.project_name)}</span>` : ''}
         <span class="tid">${esc(taskRef(x))}</span>
         <span class="triage-type">${typeIcon(x.type, { always: true })}${esc(TYPE_LABEL[x.type] || '')}</span>
-        ${x.source === 'claude' ? `<span class="by claude">${ICON.claude}${t('Registrada pelo Claude')}</span>` : ''}
+        ${agentOf(x.source) ? `<span class="by ${x.source}">${agentOf(x.source).icon}${t('Registrada pelo {agent}', { agent: agentOf(x.source).name })}</span>` : ''}
         <span>${esc(ago(x.created_at))}</span>
       </div>
       <h3>${esc(x.title)}</h3>

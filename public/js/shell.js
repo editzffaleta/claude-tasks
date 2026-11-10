@@ -12,7 +12,7 @@ import { openNewTask } from './taskform.js';
 import { openTriage } from './triage.js';
 import { confirmAction, openDialog, showMenu } from './ui.js';
 import {
-  $, ICON, PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, VISIBILITY_LABEL, ago, avatar, debounce, esc, fmtClock, notificationText, projectBadge, tilde,
+  $, AGENTS, ICON, PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, VISIBILITY_LABEL, ago, avatar, debounce, esc, fmtClock, notificationText, projectBadge, tilde,
 } from './util.js';
 
 const PROJECT_COLORS = ['#d97757', '#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#e34948', '#008300', '#7c7c84'];
@@ -591,11 +591,13 @@ function renderSince() {
   const dismissed = (() => { try { return sessionStorage.getItem('tk_since_dismissed') === since; } catch { return false; } })();
   const list = since && state.loaded && TASK_VIEWS.includes(state.view) && !dismissed ? newTasks() : [];
   if (!list.length && !state.onlyNew) { el.hidden = true; el.innerHTML = ''; return; }
-  const claude = list.filter((x) => x.source === 'claude').length;
   const projects = new Set(list.map((x) => x.project_id)).size;
   const details = [
     t('desde {quando}', { quando: sinceText(since) }),
-    claude ? tn(claude, '{n} registrada pelo Claude', '{n} registradas pelo Claude') : '',
+    ...Object.keys(AGENTS).map((a) => {
+      const n = list.filter((x) => x.source === a).length;
+      return n ? tn(n, '{n} registrada pelo {agent}', '{n} registradas pelo {agent}', { agent: AGENTS[a].name }) : '';
+    }),
     !state.projectId && projects > 1 ? tn(projects, 'em {n} projeto', 'em {n} projetos') : '',
   ].filter(Boolean).join(' · ');
   el.hidden = false;

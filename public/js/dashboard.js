@@ -6,8 +6,8 @@ import { openTask } from './drawer.js';
 import { t, tn } from './i18n.js';
 import { navigate, state, userById } from './state.js';
 import {
-  $, ICON, PRIORITIES, PRIORITY_LABEL, PROJECT_STATUS_LABEL, STATUS_LABEL, TYPES, TYPE_LABEL,
-  ago, avatar, columnLabel, daysBetween, dueInfo, esc, eventText, fmtDate, fmtDuration, fmtNumber, prioIcon, projectBadge, statusIcon, taskRef, typeIcon,
+  $, AGENTS, ICON, PRIORITIES, PRIORITY_LABEL, PROJECT_STATUS_LABEL, STATUS_LABEL, TYPES, TYPE_LABEL,
+  agentAvatar, agentByName, agentOf, ago, avatar, columnLabel, daysBetween, dueInfo, esc, eventText, fmtDate, fmtDuration, fmtNumber, prioIcon, projectBadge, statusIcon, taskRef, typeIcon,
 } from './util.js';
 
 // Estado do módulo: sobrevive às atualizações ao vivo (dados, tabelas abertas, medida da carga).
@@ -160,9 +160,11 @@ function lineChart(id, { labels, series, max }) {
 // ---------- cards ----------
 
 function tiles(k) {
-  const created = k.claude_7d
-    ? t('{c} criadas · {k} pelo Claude', { c: num(k.created_7d), k: num(k.claude_7d) })
-    : t('{c} criadas', { c: num(k.created_7d) });
+  // "12 criadas · 9 pelo Claude · 2 pelo Codex": só entram os agentes que criaram alguma.
+  const created = [
+    t('{c} criadas', { c: num(k.created_7d) }),
+    ...Object.keys(AGENTS).filter((a) => k[`${a}_7d`]).map((a) => t('{k} pelo {agent}', { k: num(k[`${a}_7d`]), agent: AGENTS[a].name })),
+  ].join(' · ');
   return `
     <div class="tiles">
       ${tile(t('Abertas'), num(k.open), { icon: ICON.grid, hint: t('de {n} no total', { n: num(k.total) }), go: 'board' })}
@@ -308,7 +310,7 @@ function workloadCard(list) {
 function utilizationCard(list) {
   const items = list.map((u) => {
     const user = state.users.find((x) => x.name === u.name);
-    const icon = user ? avatar(user, { size: 18 }) : u.name === 'Claude' ? `<span class="avatar claude" style="--s:18px">${ICON.claude}</span>` : '';
+    const icon = user ? avatar(user, { size: 18 }) : agentByName(u.name) ? agentAvatar(agentByName(u.name), { size: 18 }) : '';
     return { text: u.name, icon, value: u.minutes, tipLabel: t('registrado em 30 dias') };
   });
   return card(t('Tempo por pessoa · 30 dias'), hbars(items, { format: fmtDuration, lab: '4.4em', emptyMsg: t('Nenhum tempo registrado nos últimos 30 dias.') }), { icon: ICON.clock });
@@ -411,14 +413,14 @@ function upcomingCard(list) {
 }
 
 function activityItem(a) {
-  const who = a.user_name || { claude: 'Claude', 'automação': t('Automação'), 'você': t('Você') }[a.author] || t('Alguém');
+  const who = a.user_name || agentOf(a.author)?.name || { 'automação': t('Automação'), 'você': t('Você') }[a.author] || t('Alguém');
   const task = `<span class="tid">${esc(taskRef({ id: a.task_id, ref: a.ref }))}</span> ${esc(a.title)}`;
   const what = a.kind === 'created' ? t('criou {task}', { task })
     : a.kind === 'note' ? t('comentou em {task}', { task })
       : t('{change} em {task}', { change: esc(eventText(a.body)), task });
   return `
     <button class="feed-item" data-task="${a.task_id}">
-      <span class="feed-who ${a.author === 'claude' ? 'claude' : ''}">${a.author === 'claude' ? ICON.claude : ''}<b>${esc(who)}</b></span>
+      <span class="feed-who ${agentOf(a.author) ? a.author : ''}">${agentOf(a.author)?.icon || ''}<b>${esc(who)}</b></span>
       <span class="feed-what">${what}</span>
       <span class="feed-meta">${state.projectId ? '' : `${esc(a.project_name)} · `}${ago(a.created_at)}</span>
     </button>`;

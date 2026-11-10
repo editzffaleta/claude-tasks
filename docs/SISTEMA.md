@@ -1,6 +1,6 @@
 # Quadro de Tarefas — Documentação do sistema
 
-> Versão 5 do esquema de dados · MCP 4.3.0 com 36 ferramentas · Node 22.13+ · sem dependências obrigatórias
+> Versão 5 do esquema de dados · MCP 4.4.0 com 36 ferramentas · Node 22.13+ · sem dependências obrigatórias
 
 Este documento descreve o sistema inteiro: o que ele faz, como está organizado, como instalar e operar (inclusive no Docker), como usar cada tela, as regras de negócio, as permissões, o modelo de dados, a API REST e a segurança. A referência completa do servidor MCP (as ferramentas que o Claude usa) está em [MCP.md](MCP.md), e o guia do Mapa do código (o mapa interativo do código de cada projeto) está em [MAPA.md](MAPA.md). A referência interativa da API REST fica no próprio painel, em `/docs/api`.
 
@@ -262,6 +262,8 @@ claude-tasks/
 ```bash
 # 1. MCP disponível em todos os projetos
 claude mcp add --scope user tarefas -- "$(command -v node)" --no-warnings ~/Developer/claude-tasks/src/mcp.js
+#    (opcional) o mesmo para o Codex
+codex mcp add tarefas -- "$(command -v node)" --no-warnings ~/Developer/claude-tasks/src/mcp.js
 
 # 2. Painel sempre ligado (launchd)
 ~/Developer/claude-tasks/bin/service.sh install
@@ -272,7 +274,7 @@ cd ~/Developer/claude-tasks && npm install
 
 Depois:
 
-1. **Instrução global.** Em `~/.claude/CLAUDE.md`, a seção "Quadro de tarefas" diz ao Claude para registrar pendências sozinho. Veja a [seção 11](#11-integração-com-o-claude).
+1. **Instrução global.** Em `~/.claude/CLAUDE.md` (no Codex, `~/.codex/AGENTS.md`), a seção "Quadro de tarefas" diz ao agente para registrar pendências sozinho. Veja a [seção 11](#11-integração-com-o-claude).
 2. **Primeiro acesso.** Abra http://localhost:4317 e crie a conta de administrador.
 3. **Chat do painel (opcional).** Rode `claude` no Terminal e faça `/login`, ou configure outro provedor em Configurações → IA do chat.
 4. **E-mail (opcional).** Configure o SMTP em Configurações → E-mail (veja a [seção 9](#9-e-mail)).
@@ -565,7 +567,7 @@ Ao **concluir** uma tarefa recorrente, o sistema cria a próxima ocorrência ass
 - **Story points:** tamanho ágil. Alimentam os pontos em aberto do dashboard, a carga por pessoa (medida em pontos), o burndown e a velocidade.
 - **Timer:** um por pessoa. Iniciar um timer para o anterior da mesma pessoa. Parar arredonda para minutos, com mínimo de 1.
 - **Lançamento manual:** duração, data e nota.
-- O tempo registrado pelo Claude conta para a pessoa que está usando o Claude (ver `CLAUDE_TASKS_USER` em [MCP.md](MCP.md)) e aparece como "Claude · Nome".
+- O tempo registrado pelo Claude conta para a pessoa que está usando o Claude (ver `CLAUDE_TASKS_USER` em [MCP.md](MCP.md)) e aparece como "Claude · Nome" (ou "Codex · Nome").
 - O card mostra `gasto/estimado`, em vermelho quando passa da estimativa.
 
 ### 4.11 Labels
@@ -716,7 +718,7 @@ A URL guarda o estado (`?project=4&view=gantt&sprint=2&task=47`, ou `?workspace=
   - `1` a `5` escolhem a prioridade (Urgente a Mínima), `I` atribui a você, `S` põe na sprint ativa do projeto (o botão só aparece se houver uma) e `D` abre o prazo; a mudança vale na hora, como no detalhe da tarefa;
   - `Enter` aceita (tira a tarefa das novidades e vai para a próxima), `→` pula, `←` volta, `Backspace` arquiva (com **Desfazer**, tecla `Z`), `O` abre o detalhe completo e `Esc` fecha;
   - no fim, um resumo com o que foi aceito, arquivado e pulado: "Triagem zerada", ou **Revisar as puladas** se sobrou alguma.
-- **O Claude à vista:** tarefas que o Claude registrou mostram "✳ Claude" no card e no cabeçalho do detalhe (a dica do selo diz "Registrada pelo Claude").
+- **Os agentes à vista:** tarefas que o Claude registrou mostram "✳ Claude" no card e no cabeçalho do detalhe (a dica do selo diz "Registrada pelo Claude"). As do Codex mostram o selo "Codex", em cinza e com um ícone de terminal, para os dois não se confundirem. O mesmo vale para os avatares nas notas, na Atividade e no Dashboard.
 - **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o card (ou a linha, na Lista) acende uma brasa que se apaga em 4 segundos. Assim dá para ver o quadro reagir enquanto o Claude trabalha.
 
 ### 5.5 Lista
@@ -792,7 +794,7 @@ O detalhe abre ao clicar numa tarefa, em qualquer visão, e fecha com `Esc`. Par
   - tipo, `#id`/código, projeto (clique abre o quadro dele) e tarefa-mãe;
   - **Acompanhar** (vira observador e recebe as notificações);
   - **Mandar para o Claude:** copia um pedido pronto para colar numa sessão ("Resolva a tarefa #12 do quadro de tarefas…"), com o número ou o código que aparece no cartão, e o aviso diz em que pasta a sessão deve estar aberta. No celular, a ação fica no menu `⋯`. Numa sessão, o prompt `resolver` do MCP faz o mesmo (`/mcp__tarefas__resolver 12`);
-  - menu `⋯`: adicionar subtarefa, timer, copiar link, copiar comando do Terminal (em projetos com pasta: uma linha que abre o Claude já na pasta do projeto, com o pedido), criar link público de leitura, arquivar e excluir.
+  - menu `⋯`: mandar para o Codex (o mesmo pedido; o aviso cita o Codex), copiar comando do Terminal para o Claude ou para o Codex (em projetos com pasta: uma linha que abre o agente já na pasta do projeto, com o pedido), adicionar subtarefa, timer, copiar link, criar link público de leitura, arquivar e excluir.
 - **Título:** editável no lugar. `Enter` salva.
 - **Campos:**
   - status/coluna (as colunas fora do fluxo aparecem como "transição não permitida"), prioridade, tipo;
@@ -1011,7 +1013,7 @@ Uma regra tem **escopo** (todos os projetos ou um projeto), **gatilho**, **condi
 | `priority` | prioridade atual está na lista |
 | `type` | tipo está na lista |
 | `tag` | a tarefa tem essa label |
-| `by_claude` | a tarefa foi criada pelo Claude |
+| `by_claude` | a tarefa foi criada por um agente pelo MCP (Claude ou Codex) |
 | `days` | (due_soon) antecedência em dias |
 
 Responsáveis, observadores e campos personalizados não geram mudança de campo: trocar só eles não dispara `task_updated`.
@@ -1308,6 +1310,8 @@ Diz ao Claude, em todas as sessões, para:
 
 O próprio MCP também envia instruções equivalentes ao conectar, no campo `instructions` do `initialize`.
 
+**No Codex:** registre o mesmo servidor com `codex mcp add tarefas -- …` e ponha a mesma instrução em `~/.codex/AGENTS.md`. O servidor reconhece o Codex pelo `clientInfo` do `initialize` e grava o que ele faz como `codex`, então o painel mostra o selo "Codex" no lugar de "✳ Claude". Os prompts e o hook SessionStart ficam de fora (veja [MCP.md](MCP.md), seção 2.1).
+
 ### 11.3 Hook SessionStart
 
 `bin/session-start.js` é chamado pelo Claude Code ao abrir, limpar (`/clear`) ou compactar uma sessão. Ele:
@@ -1460,7 +1464,7 @@ Datas e horas são ISO 8601 em UTC (`created_at` etc.). Datas de calendário (`s
 | priority | TEXT | CHECK lowest/low/medium/high/urgent |
 | type | TEXT | CHECK task/bug/story/epic |
 | tags | TEXT (JSON) | lista de nomes |
-| source | TEXT | claude / user / automação / e-mail / ia / você |
+| source | TEXT | claude / codex / user / automação / e-mail / ia / você |
 | parent_id | → tasks | CASCADE |
 | sprint_id | → sprints | SET NULL |
 | column_id | → columns | SET NULL |
@@ -1684,7 +1688,7 @@ Não há limite de tentativas de login: em rede aberta, mantenha o painel atrás
 
 ```bash
 npm start   # painel em http://localhost:4317 (use outra porta para não brigar com o serviço)
-npm test    # 237 testes: 67 do quadro em 6 arquivos (test/, com bancos temporários) e 170 do plugin do Mapa do código em 19 arquivos (mapa/test/)
+npm test    # 259 testes: 78 do quadro em 8 arquivos (test/, com bancos temporários) e 181 do plugin do Mapa do código em 20 arquivos (mapa/test/)
 npm run i18n:check   # confere os dicionários do painel (scripts/i18n.js)
 npm run mcp # servidor MCP no terminal (stdio)
 ```
@@ -1696,6 +1700,8 @@ npm run mcp # servidor MCP no terminal (stdio)
 | `test/mail.test.js` | SMTP (AUTH, recusas, TLS obrigatório), IMAP (literais, limites, login) e MIME (codificações, multipart, anexos) contra servidores falsos |
 | `test/permissions.test.js` | Projetos privados, referências cruzadas, dono × gerente, automações de gerente, visualizador, comentários e menções, links públicos, workspaces aninhados, SSE, redefinição de senha |
 | `test/features.test.js` | Prefixos, 5 prioridades e pontos, labels, campos, transições, workflows, dependências, recorrência, velocidade, CSV, Jira, Trello, caixa de entrada, segredos, busca |
+| `test/agents.test.js` | Autoria por agente: o Codex reconhecido pelo `clientInfo`, tarefas, notas, tempo e avisos gravados como `codex`, e a regra `by_claude` valendo para os dois |
+| `test/panelversion.test.js` | Versão do painel: muda quando um arquivo de `public/` muda e ignora arquivos ocultos |
 | `test/mapa.test.js` | Mapa do código no quadro: situação sem e com mapa, login e iframe, visualizador e projeto privado, tarefas ligadas aos arquivos, tarefa da Saúde sem duplicar, várias tarefas presas a um cartão, permissões de perguntar e da planta, consulta pela API |
 | `mapa/test/*.test.mjs` | O plugin: leitura de código por linguagem e framework, Saúde e segredos, telas, plantas e alterações, servidor e perguntas (com CLIs falsas), exportação, celular e toque, tema, manifestos e marketplaces (`release.test.mjs`) e a cadeia de suprimentos (`supply-chain.test.mjs`: sem hooks, MCP, dependências nem pedidos para fora, e só os programas permitidos) |
 

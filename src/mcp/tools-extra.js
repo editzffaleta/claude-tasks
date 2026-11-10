@@ -6,7 +6,7 @@ import { FIELD_TYPES, ROLES, ROLE_LABEL, cleanId, formatTask } from '../db.js';
 import { exportCsv, fetchJira, fetchTrello, importCsv, importJiraIssues, importTrelloBoard } from '../importers.js';
 import { mapStatus, queryMap, readSimulation, simulationTasks } from '../mapa.js';
 import {
-  CLAUDE, actingUser, boardLink, guardAdmin, guardProject, guardTask, me, projectFrom, requireProject, store, taskLink, userIds, visible,
+  AGENT, actingUser, boardLink, guardAdmin, guardProject, guardTask, me, projectFrom, requireProject, store, taskLink, userIds, visible,
 } from './context.js';
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -73,7 +73,7 @@ export const EXTRA_TOOLS = {
         throw new Error('Só o autor ou gerentes do projeto mudam este comentário');
       }
       if (args.action === 'edit') {
-        store.updateNote(note.id, args.body, CLAUDE);
+        store.updateNote(note.id, args.body, AGENT);
         return `Comentário ${note.id} editado em #${note.task_id}.`;
       }
       if (args.confirm !== true) throw new Error('Exclusão não confirmada: envie confirm: true');
@@ -390,10 +390,10 @@ export const EXTRA_TOOLS = {
     async run(args) {
       const project = requireProject(args, { level: 'manage' });
       let r;
-      if (args.source === 'csv') r = importCsv(store, project.id, readFileSync(args.path, 'utf8'), { actor: CLAUDE });
-      else if (args.source === 'trello_file') r = importTrelloBoard(store, project.id, JSON.parse(readFileSync(args.path, 'utf8')), { actor: CLAUDE });
-      else if (args.source === 'jira_api') r = importJiraIssues(store, project.id, await fetchJira(args), { actor: CLAUDE });
-      else r = importTrelloBoard(store, project.id, await fetchTrello(args), { actor: CLAUDE });
+      if (args.source === 'csv') r = importCsv(store, project.id, readFileSync(args.path, 'utf8'), { actor: AGENT });
+      else if (args.source === 'trello_file') r = importTrelloBoard(store, project.id, JSON.parse(readFileSync(args.path, 'utf8')), { actor: AGENT });
+      else if (args.source === 'jira_api') r = importJiraIssues(store, project.id, await fetchJira(args), { actor: AGENT });
+      else r = importTrelloBoard(store, project.id, await fetchTrello(args), { actor: AGENT });
       if (args.save && (args.source === 'jira_api' || args.source === 'trello_api')) {
         const kind = args.source === 'jira_api' ? 'jira' : 'trello';
         const config = kind === 'jira'

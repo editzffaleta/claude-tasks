@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// Servidor MCP (stdio) do quadro de tarefas. O Claude Code inicia um destes por sessão;
+// Servidor MCP (stdio) do quadro de tarefas. O Claude Code (ou o Codex) inicia um destes por sessão;
 // todos gravam no mesmo banco SQLite. Implementa tools, resources, prompts e completions.
 import { createInterface } from 'node:readline';
+import { agentFromClient } from './agents.js';
 import { BOARD_URL } from './db.js';
+import { AGENT } from './mcp/context.js';
 import { PROMPTS, complete, getPrompt } from './mcp/prompts.js';
 import { RESOURCE_TEMPLATES, listResources, readResource } from './mcp/resources.js';
 import { TOOLS } from './mcp/tools.js';
 
-const SERVER_INFO = { name: 'tarefas', title: 'Quadro de tarefas', version: '4.3.0' };
+const SERVER_INFO = { name: 'tarefas', title: 'Quadro de tarefas', version: '4.4.0' };
 const SUPPORTED_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
 const INSTRUCTIONS = `Central task board shared across ALL of the user's projects (dashboard: ${BOARD_URL}). Keep it current:
@@ -49,6 +51,8 @@ function handle(msg) {
   switch (method) {
     case 'initialize': {
       const requested = params.protocolVersion;
+      // O que este cliente gravar no quadro sai com o nome dele (Claude ou Codex).
+      AGENT.author = agentFromClient(params.clientInfo);
       return {
         protocolVersion: SUPPORTED_VERSIONS.includes(requested) ? requested : SUPPORTED_VERSIONS[0],
         capabilities: {

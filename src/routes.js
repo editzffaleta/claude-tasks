@@ -3,6 +3,7 @@
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agentName } from './agents.js';
 import { handleChat } from './chat.js';
 import { cleanId, forbid, now } from './db.js';
 import { exportCsv, fetchJira, fetchTrello, importCsv, importJiraIssues, importTrelloBoard, runSync } from './importers.js';
@@ -123,7 +124,7 @@ export function buildRoutes({ store, setSession, clearSession, panelVersion }) {
           attachments: t.attachments.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size })),
           comments: t.notes.filter((n) => n.kind === 'note').map((n) => ({
             id: n.id, parent_id: n.parent_id, body: n.body, created_at: n.created_at,
-            author: n.author === 'claude' ? 'Claude' : n.user_name || (n.author === 'e-mail' ? 'E-mail' : 'Equipe'),
+            author: agentName(n.author) || n.user_name || (n.author === 'e-mail' ? 'E-mail' : 'Equipe'),
           })),
         },
       };

@@ -284,6 +284,7 @@ export const ICON = {
   plus: svg('<path d="M8 3v10M3 8h10"/>'),
   close: svg('<path d="M4 4l8 8M12 4l-8 8"/>'),
   claude: svg('<path d="M8 1.8v12.4M1.8 8h12.4M3.6 3.6l8.8 8.8M12.4 3.6l-8.8 8.8"/>'),
+  codex: svg('<path d="M3 4.5L6.5 8 3 11.5M8.5 11.5H13"/>'),
   comment: svg('<path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/>'),
   copy: svg('<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5V3a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6.5a1 1 0 0 0 1 1h.5"/>'),
   check: svg('<path d="M3.5 8.5l3 3 6-7"/>'),
@@ -379,6 +380,22 @@ export function typeIcon(type, { always = false } = {}) {
     epic: '<path d="M9 1.8L3.5 9H8l-1 5.2L12.5 7H8z"/>',
   }[type];
   return `<span class="type-icon ${type}" title="${TYPE_LABEL[type]}"><svg viewBox="0 0 16 16">${body}</svg></span>`;
+}
+
+// Agentes que escrevem no quadro pelo MCP. A chave vem em source (tarefas) e em author
+// (notas, tempo, atividade); cli é o comando que abre uma sessão no Terminal.
+export const AGENTS = {
+  claude: { name: 'Claude', cli: 'claude', icon: ICON.claude },
+  codex: { name: 'Codex', cli: 'codex', icon: ICON.codex },
+};
+export const agentOf = (key) => (Object.hasOwn(AGENTS, key ?? '') ? AGENTS[key] : null);
+export const agentByName = (name) => Object.keys(AGENTS).find((key) => AGENTS[key].name === name) || null;
+export const agentAvatar = (key, { size = 0, big = false } = {}) =>
+  `<span class="avatar ${key}${big ? ' big' : ''}"${size ? ` style="--s:${size}px"` : ''} title="${AGENTS[key].name}">${AGENTS[key].icon}</span>`;
+// Selo de quem registrou a tarefa ("✳ Claude", "›_ Codex"). title(nome) monta a dica.
+export function agentBadge(key, title) {
+  const a = agentOf(key);
+  return a ? `<span class="by ${key}"${title ? ` title="${esc(title(a.name))}"` : ''}>${a.icon}${a.name}</span>` : '';
 }
 
 export function avatar(user, { size = 20 } = {}) {

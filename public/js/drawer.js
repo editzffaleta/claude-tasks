@@ -6,8 +6,8 @@ import { t, tn } from './i18n.js';
 import { can, labelFor, load, markSeen, navigate, state, syncUrl, userById } from './state.js';
 import { confirmAction, showMenu } from './ui.js';
 import {
-  $, $$, DEPENDENCY_HINT, DEPENDENCY_LABEL, DEPENDENCY_TYPES, FREQS, FREQ_LABEL, ICON, PRIORITIES, PRIORITY_LABEL, SPRINT_STATUS_LABEL,
-  STATUS_LABEL, TYPES, TYPE_LABEL, ago, avatar, columnLabel, describeRecurrence, dtf, dueInfo, esc, eventText, fmtDate, fmtDuration, fmtNumber, localDate, md,
+  $, $$, AGENTS, DEPENDENCY_HINT, DEPENDENCY_LABEL, DEPENDENCY_TYPES, FREQS, FREQ_LABEL, ICON, PRIORITIES, PRIORITY_LABEL, SPRINT_STATUS_LABEL,
+  STATUS_LABEL, TYPES, TYPE_LABEL, agentAvatar, agentBadge, agentOf, ago, avatar, columnLabel, describeRecurrence, dtf, dueInfo, esc, eventText, fmtDate, fmtDuration, fmtNumber, localDate, md,
   prioIcon, statusIcon, taskRef, tilde, typeIcon, weekdayNames,
 } from './util.js';
 
@@ -301,7 +301,7 @@ function timeSection(x) {
       <div class="time-list">
         ${task.time_entries.slice(0, 20).map((e) => `
           <div class="time-row">
-            <span class="who">${e.author === 'claude' ? `Claude${e.user_name ? ` · ${esc(e.user_name)}` : ''}` : e.user_name ? esc(e.user_name) : t('Você')}</span>
+            <span class="who">${agentOf(e.author) ? `${agentOf(e.author).name}${e.user_name ? ` · ${esc(e.user_name)}` : ''}` : e.user_name ? esc(e.user_name) : t('Você')}</span>
             <span class="muted">${fmtDate(localDate(new Date(e.started_at)))}</span>
             <span class="note">${esc(e.note)}</span>
             <b>${e.ended_at ? fmtDuration(e.minutes) : `<span class="live-time">${t('rodando')}</span>`}</b>
@@ -345,11 +345,11 @@ function sharesSection() {
 
 function who(n) {
   if (n.user_name) return esc(n.user_name);
-  return { claude: 'Claude', 'automação': t('Automação'), 'você': t('Você'), 'e-mail': t('E-mail'), ia: t('IA'), user: t('Alguém') }[n.author] || esc(n.author);
+  return agentOf(n.author)?.name || { 'automação': t('Automação'), 'você': t('Você'), 'e-mail': t('E-mail'), ia: t('IA'), user: t('Alguém') }[n.author] || esc(n.author);
 }
 
 function noteAvatar(n) {
-  if (n.author === 'claude') return `<span class="avatar claude">${ICON.claude}</span>`;
+  if (agentOf(n.author)) return agentAvatar(n.author);
   if (n.author === 'e-mail') return `<span class="avatar mail">${ICON.mail}</span>`;
   if (n.user_name) return avatar({ name: n.user_name, color: n.user_color, avatar: n.user_avatar }, { size: 22 });
   return `<span class="avatar">${esc(who(n)[0] || '?')}</span>`;
@@ -395,8 +395,8 @@ function timeline(x) {
   for (const c of comments) if (c.parent_id) byParent.set(c.parent_id, [...(byParent.get(c.parent_id) || []), c]);
   const known = new Set(comments.map((c) => c.id));
   const roots = comments.filter((c) => !c.parent_id || !known.has(c.parent_id));
-  // Quem criou: a conta (created_by) quando houver; senão a origem (Claude, automação, e-mail).
-  const creator = x.source === 'claude' ? 'Claude' : userById(x.created_by)?.name
+  // Quem criou: o agente (Claude, Codex), a conta (created_by) quando houver ou a origem (automação, e-mail).
+  const creator = agentOf(x.source)?.name || userById(x.created_by)?.name
     || { 'automação': t('Automação'), 'e-mail': t('E-mail') }[x.source] || t('Alguém');
   const created = `<div class="note event"><div class="avatar-dot">${ICON.dot}</div><div class="note-meta">${t('{who} criou a tarefa', { who: `<b>${esc(creator)}</b>` })} · ${ago(x.created_at)}</div></div>`;
   const items = timelineMode === 'comments'
@@ -443,9 +443,9 @@ function render() {
       ${x.parent_id ? `<span>·</span><button class="link-btn parent" data-open="${x.parent_id}">${ICON.subtask}${esc(x.parent_title || `#${x.parent_id}`)}</button>` : ''}
       ${x.archived_at ? `<span class="chip">${t('arquivada')}</span>` : ''}
       ${!canEdit ? `<span class="chip">${ICON.eye}${t('somente leitura')}</span>` : ''}
-      ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Registrada pelo Claude'))}">${ICON.claude}${t('Claude')}</span>` : ''}
+      ${agentBadge(x.source, (agent) => t('Registrada pelo {agent}', { agent }))}
       <span class="spacer"></span>
-      <button class="btn bordered small send-claude" data-action="copy" aria-label="${esc(t('Mandar para o Claude'))}" title="${esc(t('Copiar pedido para colar numa sessão do Claude'))}">${ICON.claude}<span>${t('Mandar para o Claude')}</span></button>
+      <button class="btn bordered small send-claude" data-action="copy" aria-label="${esc(sendLabel('claude'))}" title="${esc(t('Copiar pedido para colar numa sessão do {agent}', { agent: AGENTS.claude.name }))}">${ICON.claude}<span>${sendLabel('claude')}</span></button>
       <button class="icon-btn small ${watching ? 'on' : ''}" data-action="watch" aria-pressed="${!!watching}" aria-label="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}" title="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}">${ICON.eye}</button>
       <button class="icon-btn small" data-action="more" aria-label="${esc(t('Mais ações'))}" title="${esc(t('Mais ações'))}" aria-haspopup="menu" aria-expanded="false">${ICON.more}</button>
       <button class="icon-btn small" data-action="close" aria-label="${esc(t('Fechar (Esc)'))}" title="${esc(t('Fechar (Esc)'))}">${ICON.close}</button>
@@ -581,7 +581,9 @@ async function shareTask() {
 
 // O pedido que a pessoa cola numa sessão do Claude. Leva o número que aparece no cartão: o MCP
 // entende tanto "#28" quanto o código do projeto ("WEB-12").
-const claudeRequest = (x) => t('Resolva a tarefa {ref} do quadro de tarefas (“{title}”, projeto {project}). Leia os detalhes com get_task, marque como em andamento e, ao terminar, conclua com complete_tasks e uma nota do que foi feito.', { ref: taskRef(x), title: x.title, project: x.project_name });
+// O pedido é o mesmo para qualquer agente: texto puro, que funciona numa sessão do Claude ou do Codex.
+const agentRequest = (x) => t('Resolva a tarefa {ref} do quadro de tarefas (“{title}”, projeto {project}). Leia os detalhes com get_task, marque como em andamento e, ao terminar, conclua com complete_tasks e uma nota do que foi feito.', { ref: taskRef(x), title: x.title, project: x.project_name });
+const sendLabel = (key) => t('Mandar para o {agent}', { agent: AGENTS[key].name });
 
 // Sem acesso à área de transferência (página fora de HTTPS, permissão negada), o texto vai no aviso.
 async function copyText(text, done) {
@@ -593,16 +595,17 @@ async function copyText(text, done) {
   }
 }
 
-function sendToClaude() {
+function sendToAgent(key) {
   const x = task;
-  return copyText(claudeRequest(x), x.project_path
-    ? t('Pedido copiado. Cole numa sessão do Claude aberta em {path}', { path: tilde(x.project_path) })
-    : t('Pedido copiado. Cole numa sessão do Claude'));
+  const agent = AGENTS[key].name;
+  return copyText(agentRequest(x), x.project_path
+    ? t('Pedido copiado. Cole numa sessão do {agent} aberta em {path}', { agent, path: tilde(x.project_path) })
+    : t('Pedido copiado. Cole numa sessão do {agent}', { agent }));
 }
 
-// Uma linha que abre a sessão já na pasta do projeto, com o pedido.
+// Uma linha que abre a sessão do agente já na pasta do projeto, com o pedido.
 const shellQuote = (text) => `'${String(text).replaceAll("'", "'\\''")}'`;
-const copyTerminalCommand = () => copyText(`cd ${shellQuote(task.project_path)} && claude ${shellQuote(claudeRequest(task))}`, t('Comando copiado. Cole no Terminal'));
+const copyTerminalCommand = (key) => copyText(`cd ${shellQuote(task.project_path)} && ${AGENTS[key].cli} ${shellQuote(agentRequest(task))}`, t('Comando copiado. Cole no Terminal'));
 
 function moreMenu(anchor) {
   const x = task;
@@ -610,14 +613,17 @@ function moreMenu(anchor) {
   // No celular o botão do cabeçalho some (styles.css) e a ação fica aqui.
   const narrow = matchMedia('(max-width: 820px)').matches;
   showMenu(anchor, [
-    ...(narrow ? [{ label: t('Mandar para o Claude'), icon: ICON.claude, onClick: sendToClaude }, { divider: true }] : []),
+    ...(narrow ? [{ label: sendLabel('claude'), icon: ICON.claude, onClick: () => sendToAgent('claude') }] : []),
+    { label: sendLabel('codex'), icon: ICON.codex, onClick: () => sendToAgent('codex') },
+    ...(x.project_path ? Object.keys(AGENTS).map((key) => (
+      { label: t('Copiar comando do Terminal ({agent})', { agent: AGENTS[key].name }), icon: ICON.command, onClick: () => copyTerminalCommand(key) })) : []),
+    { divider: true },
     ...(canEdit ? [
       { label: t('Adicionar subtarefa'), icon: ICON.subtask, onClick: () => $('[data-form="subtask"] input')?.focus() },
       { label: x.timer_running ? t('Parar timer') : t('Iniciar timer'), icon: ICON.clock, onClick: () => timer(x.timer_running ? 'stop' : 'start') },
       { label: t('Criar link público de leitura'), icon: ICON.share, onClick: shareTask },
     ] : []),
     { label: t('Copiar link'), icon: ICON.link, onClick: () => navigator.clipboard.writeText(`${location.origin}/?task=${x.id}`).then(() => toast(t('Link copiado'))) },
-    ...(x.project_path ? [{ label: t('Copiar comando do Terminal'), icon: ICON.command, onClick: copyTerminalCommand }] : []),
     ...(canEdit ? [
       { divider: true },
       { label: x.archived_at ? t('Desarquivar') : t('Arquivar'), icon: ICON.archive, onClick: () => patch({ archived: !x.archived_at }) },
@@ -781,7 +787,7 @@ export function mountDrawer() {
     if (action === 'start' || action === 'stop') timer(action);
     if (action === 'time-form') { showTimeForm = !showTimeForm; renderSections(); $('[data-form="time"] input')?.focus(); }
     if (action === 'upload') $('#d-file').click();
-    if (action === 'copy') sendToClaude();
+    if (action === 'copy') sendToAgent('claude');
   };
 
   d.onchange = (e) => {
