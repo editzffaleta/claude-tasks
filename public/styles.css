@@ -1041,7 +1041,19 @@ td.c-points, td.c-time, td.c-due { font-variant-numeric: tabular-nums; }
   min-width: 0;
 }
 .drawer-head .type-icon svg { width: 15px; height: 15px; }
-.drawer-head .by.claude { height: 22px; padding: 0 8px; border-radius: 11px; background: var(--accent-weak); }
+.drawer-head .by.claude { flex: none; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--accent-weak); white-space: nowrap; }
+/* Quando falta espaço, o código da tarefa fica inteiro e os nomes encurtam com reticências:
+   primeiro o da tarefa-mãe e, só se ainda faltar, o do projeto. */
+.drawer-head .tid { flex: none; white-space: nowrap; }
+.drawer-head .link-btn { display: block; flex: 0 1 auto; min-width: 0; }
+.drawer-head .link-btn.parent { flex-shrink: 9999; min-width: 56px; }
+.drawer-head .link-btn svg { margin-right: 4px; vertical-align: -2px; }
+.send-claude { flex: none; margin-right: 2px; }
+.send-claude svg { width: 13px; height: 13px; color: var(--accent); }
+/* No celular o cabeçalho é estreito: "Mandar para o Claude" fica no menu ⋯. */
+@media (max-width: 820px) {
+  .send-claude { display: none; }
+}
 .link-btn.parent { color: var(--text-3); }
 .title-edit {
   width: 100%;

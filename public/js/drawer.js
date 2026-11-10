@@ -443,10 +443,10 @@ function render() {
       ${x.parent_id ? `<span>·</span><button class="link-btn parent" data-open="${x.parent_id}">${ICON.subtask}${esc(x.parent_title || `#${x.parent_id}`)}</button>` : ''}
       ${x.archived_at ? `<span class="chip">${t('arquivada')}</span>` : ''}
       ${!canEdit ? `<span class="chip">${ICON.eye}${t('somente leitura')}</span>` : ''}
-      ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Criada pelo Claude'))}">${ICON.claude}${t('Registrada pelo Claude')}</span>` : ''}
+      ${x.source === 'claude' ? `<span class="by claude" title="${esc(t('Registrada pelo Claude'))}">${ICON.claude}${t('Claude')}</span>` : ''}
       <span class="spacer"></span>
+      <button class="btn bordered small send-claude" data-action="copy" aria-label="${esc(t('Mandar para o Claude'))}" title="${esc(t('Copiar pedido para colar numa sessão do Claude'))}">${ICON.claude}<span>${t('Mandar para o Claude')}</span></button>
       <button class="icon-btn small ${watching ? 'on' : ''}" data-action="watch" aria-pressed="${!!watching}" aria-label="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}" title="${esc(watching ? t('Deixar de acompanhar') : t('Acompanhar (receber notificações)'))}">${ICON.eye}</button>
-      <button class="icon-btn small" data-action="copy" aria-label="${esc(t('Copiar pedido para colar numa sessão do Claude'))}" title="${esc(t('Copiar pedido para colar numa sessão do Claude'))}">${ICON.copy}</button>
       <button class="icon-btn small" data-action="more" aria-label="${esc(t('Mais ações'))}" title="${esc(t('Mais ações'))}" aria-haspopup="menu" aria-expanded="false">${ICON.more}</button>
       <button class="icon-btn small" data-action="close" aria-label="${esc(t('Fechar (Esc)'))}" title="${esc(t('Fechar (Esc)'))}">${ICON.close}</button>
     </div>
@@ -579,16 +579,45 @@ async function shareTask() {
   refreshDrawer();
 }
 
+// O pedido que a pessoa cola numa sessão do Claude. Leva o número que aparece no cartão: o MCP
+// entende tanto "#28" quanto o código do projeto ("WEB-12").
+const claudeRequest = (x) => t('Resolva a tarefa {ref} do quadro de tarefas (“{title}”, projeto {project}). Leia os detalhes com get_task, marque como em andamento e, ao terminar, conclua com complete_tasks e uma nota do que foi feito.', { ref: taskRef(x), title: x.title, project: x.project_name });
+
+// Sem acesso à área de transferência (página fora de HTTPS, permissão negada), o texto vai no aviso.
+async function copyText(text, done) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(done);
+  } catch {
+    toast(text);
+  }
+}
+
+function sendToClaude() {
+  const x = task;
+  return copyText(claudeRequest(x), x.project_path
+    ? t('Pedido copiado. Cole numa sessão do Claude aberta em {path}', { path: tilde(x.project_path) })
+    : t('Pedido copiado. Cole numa sessão do Claude'));
+}
+
+// Uma linha que abre a sessão já na pasta do projeto, com o pedido.
+const shellQuote = (text) => `'${String(text).replaceAll("'", "'\\''")}'`;
+const copyTerminalCommand = () => copyText(`cd ${shellQuote(task.project_path)} && claude ${shellQuote(claudeRequest(task))}`, t('Comando copiado. Cole no Terminal'));
+
 function moreMenu(anchor) {
   const x = task;
   const canEdit = editable();
+  // No celular o botão do cabeçalho some (styles.css) e a ação fica aqui.
+  const narrow = matchMedia('(max-width: 820px)').matches;
   showMenu(anchor, [
+    ...(narrow ? [{ label: t('Mandar para o Claude'), icon: ICON.claude, onClick: sendToClaude }, { divider: true }] : []),
     ...(canEdit ? [
       { label: t('Adicionar subtarefa'), icon: ICON.subtask, onClick: () => $('[data-form="subtask"] input')?.focus() },
       { label: x.timer_running ? t('Parar timer') : t('Iniciar timer'), icon: ICON.clock, onClick: () => timer(x.timer_running ? 'stop' : 'start') },
       { label: t('Criar link público de leitura'), icon: ICON.share, onClick: shareTask },
     ] : []),
     { label: t('Copiar link'), icon: ICON.link, onClick: () => navigator.clipboard.writeText(`${location.origin}/?task=${x.id}`).then(() => toast(t('Link copiado'))) },
+    ...(x.project_path ? [{ label: t('Copiar comando do Terminal'), icon: ICON.command, onClick: copyTerminalCommand }] : []),
     ...(canEdit ? [
       { divider: true },
       { label: x.archived_at ? t('Desarquivar') : t('Arquivar'), icon: ICON.archive, onClick: () => patch({ archived: !x.archived_at }) },
@@ -752,10 +781,7 @@ export function mountDrawer() {
     if (action === 'start' || action === 'stop') timer(action);
     if (action === 'time-form') { showTimeForm = !showTimeForm; renderSections(); $('[data-form="time"] input')?.focus(); }
     if (action === 'upload') $('#d-file').click();
-    if (action === 'copy') {
-      await navigator.clipboard.writeText(t('Pegue a tarefa #{id} do quadro de tarefas (“{title}”), leia os detalhes com get_task e trabalhe nela.', { id: x.id, title: x.title }));
-      toast(t('Pedido copiado. Cole numa sessão do Claude'));
-    }
+    if (action === 'copy') sendToClaude();
   };
 
   d.onchange = (e) => {

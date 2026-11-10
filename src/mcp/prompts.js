@@ -13,8 +13,16 @@ function projectArg(value) {
   return store.resolveProject({ project_path: process.cwd(), create: false });
 }
 
+// Aceita 12, "#12", o código do projeto ("WEB-12") e a sugestão do autocompletar ("12 Título").
 function taskArg(value) {
-  const id = Number(String(value || '').match(/\d+/)?.[0]);
+  const text = String(value || '').trim();
+  const code = text.match(/^#?([A-Za-z][A-Za-z0-9]{1,9}-\d+)(?![\w-])/)?.[1];
+  let id = null;
+  try {
+    id = code ? store.resolveTaskRef(code) : Number(text.match(/\d+/)?.[0]);
+  } catch {
+    // Código que não existe: cai no erro abaixo.
+  }
   const t = id && store.taskWithNotes(id);
   if (!t) throw Object.assign(new Error(`Tarefa "${value}" não encontrada`), { code: -32602 });
   return t;
@@ -60,6 +68,38 @@ Depois:
 
 Candidatas:
 ${candidates.map((t) => `- ${formatTask(t, { withProject: !p })}`).join('\n') || '(nenhuma tarefa disponível — avise o usuário)'}`;
+    },
+  },
+
+  resolver: {
+    title: 'Resolver tarefa',
+    description: 'Pega uma tarefa específica do quadro, marca como em andamento, faz o trabalho e conclui com uma nota do que foi feito.',
+    arguments: [{ name: 'tarefa', description: 'Número ou código da tarefa, ex.: 28 ou WEB-12', required: true }],
+    build({ tarefa }) {
+      const t = taskArg(tarefa);
+      const open = t.subtasks.filter((s) => s.status !== 'done');
+      const blockers = t.blockers.filter((b) => b.status !== 'done');
+      const warnings = [];
+      if (t.status === 'done') warnings.push('Esta tarefa já está concluída. Pergunte se é para reabrir antes de mexer em qualquer coisa.');
+      if (t.archived_at) warnings.push('Esta tarefa está arquivada. Pergunte se é para desarquivar antes de trabalhar nela.');
+      if (blockers.length) warnings.push(`${blockers.length} tarefa(s) precisam vir antes desta (veja "Bloqueada por"). Pergunte se é para resolver essas primeiro.`);
+      // O código da tarefa mora na pasta do projeto dela; worktrees contam como o mesmo projeto.
+      const here = store.resolveProject({ project_path: process.cwd(), create: false });
+      if (t.project_path && here?.id !== t.project_id) {
+        warnings.push(`Esta sessão está em ${process.cwd()}, e o projeto da tarefa fica em ${t.project_path}. Avise o usuário e não mexa em arquivos daqui sem ele confirmar.`);
+      }
+      return [
+        `Resolva a tarefa #${t.id} do quadro, do começo ao fim.`,
+        ...warnings.map((w) => `Atenção: ${w}`),
+        '',
+        '1. Marque como "doing" com update_task.',
+        '2. Os detalhes estão abaixo; use get_attachment se precisar ver um anexo.',
+        `3. Faça o trabalho.${open.length ? ` Ela tem ${open.length} subtarefa(s) aberta(s): resolva na ordem e conclua cada uma ao terminar.` : ''}`,
+        '4. Se travar em algo que depende do usuário ou de terceiros, marque como "blocked" com uma nota dizendo o que falta, e pare.',
+        '5. Ao terminar, use complete_tasks com uma nota curta do que foi feito, e registre com add_tasks o que ficar pendente.',
+        '',
+        describeTask(t),
+      ].join('\n');
     },
   },
 

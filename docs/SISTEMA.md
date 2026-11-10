@@ -1,6 +1,6 @@
 # Quadro de Tarefas — Documentação do sistema
 
-> Versão 5 do esquema de dados · MCP 4.2.0 com 36 ferramentas · Node 22.13+ · sem dependências obrigatórias
+> Versão 5 do esquema de dados · MCP 4.3.0 com 36 ferramentas · Node 22.13+ · sem dependências obrigatórias
 
 Este documento descreve o sistema inteiro: o que ele faz, como está organizado, como instalar e operar (inclusive no Docker), como usar cada tela, as regras de negócio, as permissões, o modelo de dados, a API REST e a segurança. A referência completa do servidor MCP (as ferramentas que o Claude usa) está em [MCP.md](MCP.md), e o guia do Mapa do código (o mapa interativo do código de cada projeto) está em [MAPA.md](MAPA.md). A referência interativa da API REST fica no próprio painel, em `/docs/api`.
 
@@ -50,7 +50,7 @@ Ele foi inspirado no [Taskosaur](https://github.com/taskosaur/taskosaur) e hoje 
 - **Colaboração:** comentários em conversa com @menções, notificações por tipo e canal (painel, e-mail, macOS), links públicos de leitura.
 - **E-mail:** SMTP para convites, senha, notificações e automações; caixa de entrada IMAP por projeto que transforma e-mails em tarefas.
 - **Automação:** regras "quando X → faça Y" com 11 gatilhos e 12 ações, inclusive enviar e-mail e mover de sprint.
-- **IA:** MCP com 36 ferramentas, resources e 9 prompts; chat no painel com três provedores.
+- **IA:** MCP com 36 ferramentas, resources e 10 prompts; chat no painel com três provedores.
 - **Mapa do código:** plugin para Claude Code e Codex que desenha um mapa interativo do código de cada projeto, com verificação de saúde, telas, fluxos e trabalho recente; o quadro mostra o mapa numa aba, liga as tarefas aos arquivos e cria tarefas a partir dele. A **Simulação** leva o sistema do mapa ao simulador Breakscale e mostra onde ele quebra quando o tráfego sobe, com cada gargalo virando tarefa ([MAPA.md](MAPA.md)).
 - **Operação:** tempo real (SSE), busca universal ⌘K, 5 idiomas, painel de administração com backups, API REST documentada em OpenAPI 3.1, Docker e CI.
 
@@ -716,7 +716,7 @@ A URL guarda o estado (`?project=4&view=gantt&sprint=2&task=47`, ou `?workspace=
   - `1` a `5` escolhem a prioridade (Urgente a Mínima), `I` atribui a você, `S` põe na sprint ativa do projeto (o botão só aparece se houver uma) e `D` abre o prazo; a mudança vale na hora, como no detalhe da tarefa;
   - `Enter` aceita (tira a tarefa das novidades e vai para a próxima), `→` pula, `←` volta, `Backspace` arquiva (com **Desfazer**, tecla `Z`), `O` abre o detalhe completo e `Esc` fecha;
   - no fim, um resumo com o que foi aceito, arquivado e pulado: "Triagem zerada", ou **Revisar as puladas** se sobrou alguma.
-- **O Claude à vista:** tarefas que o Claude registrou mostram "✳ Claude" no card (e "Registrada pelo Claude" no detalhe).
+- **O Claude à vista:** tarefas que o Claude registrou mostram "✳ Claude" no card e no cabeçalho do detalhe (a dica do selo diz "Registrada pelo Claude").
 - **Brasa viva:** quando uma tarefa muda por fora (o Claude pelo MCP, outra pessoa, uma automação), o card (ou a linha, na Lista) acende uma brasa que se apaga em 4 segundos. Assim dá para ver o quadro reagir enquanto o Claude trabalha.
 
 ### 5.5 Lista
@@ -791,8 +791,8 @@ O detalhe abre ao clicar numa tarefa, em qualquer visão, e fecha com `Esc`. Par
 - **Cabeçalho:**
   - tipo, `#id`/código, projeto (clique abre o quadro dele) e tarefa-mãe;
   - **Acompanhar** (vira observador e recebe as notificações);
-  - **Copiar para o Claude:** gera um pedido pronto para colar numa sessão ("Pegue a tarefa #12 do quadro… leia os detalhes com get_task e trabalhe nela");
-  - menu `⋯`: adicionar subtarefa, timer, copiar link, criar link público de leitura, arquivar e excluir.
+  - **Mandar para o Claude:** copia um pedido pronto para colar numa sessão ("Resolva a tarefa #12 do quadro de tarefas…"), com o número ou o código que aparece no cartão, e o aviso diz em que pasta a sessão deve estar aberta. No celular, a ação fica no menu `⋯`. Numa sessão, o prompt `resolver` do MCP faz o mesmo (`/mcp__tarefas__resolver 12`);
+  - menu `⋯`: adicionar subtarefa, timer, copiar link, copiar comando do Terminal (em projetos com pasta: uma linha que abre o Claude já na pasta do projeto, com o pedido), criar link público de leitura, arquivar e excluir.
 - **Título:** editável no lugar. `Enter` salva.
 - **Campos:**
   - status/coluna (as colunas fora do fluxo aparecem como "transição não permitida"), prioridade, tipo;
@@ -1291,7 +1291,7 @@ Importar exige ser gerente ou dono do projeto de destino. Reimportar **atualiza*
 
 ### 11.1 MCP `tarefas`
 
-Servidor MCP local (stdio) registrado no escopo de usuário, disponível em todas as sessões do Claude Code de qualquer projeto. Tem 36 ferramentas, resources, 9 prompts (comandos `/mcp__tarefas__…`) e autocompletar. **Referência completa: [MCP.md](MCP.md).**
+Servidor MCP local (stdio) registrado no escopo de usuário, disponível em todas as sessões do Claude Code de qualquer projeto. Tem 36 ferramentas, resources, 10 prompts (comandos `/mcp__tarefas__…`) e autocompletar. **Referência completa: [MCP.md](MCP.md).**
 
 - **Quem é "eu":** `CLAUDE_TASKS_USER` (e-mail ou nome) ou, se o quadro tem uma única conta, essa conta.
 - **Permissões:** por padrão o MCP local tem acesso total (como o próprio arquivo do banco). Com `CLAUDE_TASKS_ENFORCE=1`, as ferramentas aplicam as permissões de "eu"; se "eu" não puder ser identificado, não há restrição.
