@@ -238,7 +238,7 @@ test('resources: lista, templates e leitura', async () => {
 test('prompts e autocompletar', async () => {
   const list = await rpc('prompts/list');
   assert.deepEqual(list.result.prompts.map((p) => p.name).sort(), [
-    'concluir', 'pendencias', 'planejar_sprint', 'proxima', 'quebrar_tarefa', 'registrar_pendencias', 'relatorio', 'revisar_prazos', 'triagem',
+    'concluir', 'pendencias', 'planejar_sprint', 'proxima', 'quebrar_tarefa', 'registrar_pendencias', 'relatorio', 'resolver', 'revisar_prazos', 'triagem',
   ]);
   const p = await rpc('prompts/get', { name: 'pendencias', arguments: { projeto: 'MeuApp' } });
   assert.equal(p.result.messages[0].role, 'user');
@@ -254,6 +254,32 @@ test('prompts e autocompletar', async () => {
   assert.ok(c1.result.completion.values.includes('MeuApp'));
   const c2 = await rpc('completion/complete', { ref: { type: 'ref/resource', uri: 'tarefas://tasks/{id}' }, argument: { name: 'id', value: '' } });
   assert.ok(c2.result.completion.values.length > 0);
+});
+
+test('prompt resolver: pega a tarefa pelo número ou pelo código e avisa se a pasta é outra', async () => {
+  const text = async (name, tarefa) => (await rpc('prompts/get', { name, arguments: { tarefa } })).result.messages[0].content.text;
+  const byId = await text('resolver', '2');
+  assert.match(byId, /^Resolva a tarefa #2 do quadro/);
+  assert.match(byId, /update_task[\s\S]*complete_tasks/);
+  // O MCP do teste roda fora da pasta do projeto MeuApp.
+  assert.match(byId, /Atenção: Esta sessão está em .*, e o projeto da tarefa fica em .*MeuApp/);
+  assert.equal(await text('resolver', '#2'), byId);
+
+  // Com código de projeto, "COD-1" não pode virar a tarefa de número geral 1.
+  await call('manage_project', { action: 'create', name: 'Com código', key: 'COD' });
+  await call('add_tasks', { project: 'Com código', tasks: [{ title: 'Tarefa com código' }] });
+  const byCode = await text('resolver', 'COD-1');
+  assert.match(byCode, /Tarefa com código/);
+  // Projeto sem pasta: não há com o que comparar a pasta da sessão.
+  assert.doesNotMatch(byCode, /Atenção: Esta sessão está em/);
+  assert.match(await text('concluir', 'cod-1'), /Tarefa com código/);
+
+  const missing = await rpc('prompts/get', { name: 'resolver', arguments: { tarefa: 'COD-99' } });
+  assert.equal(missing.error.code, -32602);
+  const done = await call('complete_tasks', { ids: ['COD-1'], note: 'feito' });
+  assert.equal(done.isError, false);
+  assert.match(await text('resolver', 'COD-1'), /Atenção: Esta tarefa já está concluída/);
+  await call('manage_project', { action: 'archive', project: 'Com código' });
 });
 
 test('erros voltam como isError', async () => {

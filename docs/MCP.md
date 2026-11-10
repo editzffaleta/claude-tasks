@@ -1,6 +1,6 @@
 # MCP `tarefas` — Referência completa
 
-> Servidor MCP 4.2.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
+> Servidor MCP 4.3.0 do Quadro de Tarefas · 36 ferramentas · transporte stdio · protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25
 
 O MCP `tarefas` é a ponte entre o Claude e o quadro central de tarefas. Com ele, o Claude registra, consulta, organiza e conclui tarefas de **qualquer projeto**, gerencia sprints, colunas, fluxos, labels, campos, membros, workspaces, automações e caixas de entrada, controla tempo, lê anexos, cria links públicos, importa e exporta tarefas e gera relatórios. Tudo vai para o mesmo banco do painel (http://localhost:4317).
 
@@ -30,7 +30,7 @@ A documentação do sistema como um todo (painel, regras de negócio, permissõe
 | --- | --- |
 | **Tools** (36) | Tarefas, comentários, projetos, colunas e fluxos, sprints, tempo, anexos, visão geral, atividade, busca, equipe e papéis, organizações e workspaces, labels, campos personalizados, links públicos, notificações, automações, caixa de entrada, importação e exportação, configurações, "abrir no painel" e consulta ao mapa do código |
 | **Resources** | Conteúdo citável com `@` numa conversa: visão geral, minhas tarefas, quadro de cada projeto, qualquer tarefa |
-| **Prompts** (9) | Fluxos prontos que viram comandos no Claude Code: `/mcp__tarefas__proxima`, `/mcp__tarefas__planejar_sprint`… |
+| **Prompts** (10) | Fluxos prontos que viram comandos no Claude Code: `/mcp__tarefas__proxima`, `/mcp__tarefas__planejar_sprint`… |
 | **Completions** | Autocompletar de projetos, tarefas e opções nos argumentos dos prompts e resources |
 | **Instructions** | Regras de uso enviadas ao Claude ao conectar (quando registrar, como escrever, nunca excluir sem pedido) |
 
@@ -217,6 +217,7 @@ outra sessão ─▶ hook SessionStart mostra as pendências ─▶ /mcp__tarefa
 | --- | --- |
 | "Anota isso para depois" | `list_tasks` + `add_tasks` |
 | "O que tem pendente aqui?" | `list_tasks` ou o prompt `pendencias` |
+| "Resolve a tarefa 28 do quadro" | `get_task`, `update_task` e `complete_tasks`, ou o prompt `resolver` |
 | "Quebra essa feature em etapas" | `add_tasks` com `parent_id` e `blocked_by` |
 | "Coloca as tarefas de UI na próxima sprint" | `manage_sprints` + `update_tasks` com `sprint: "next"` |
 | "Quanto tempo gastei na Loja Online essa semana?" | `time_report` |
@@ -1483,12 +1484,13 @@ Um URI inexistente devolve o erro JSON-RPC `-32002` ("Resource não encontrado")
 
 No Claude Code, os prompts viram comandos `/mcp__tarefas__<nome>`. Os argumentos vão depois do comando, separados por espaço, e o Claude Code sugere valores (veja a [seção 8](#8-autocompletar)). Cada prompt **já embute os dados do quadro** de que precisa, então o Claude começa a trabalhar sem consultas extras.
 
-Quando o argumento `projeto` é omitido, o prompt usa o projeto da pasta da sessão. Nos prompts em que isso faz sentido, sem projeto ele olha todos os projetos.
+Quando o argumento `projeto` é omitido, o prompt usa o projeto da pasta da sessão. Nos prompts em que isso faz sentido, sem projeto ele olha todos os projetos. O argumento `tarefa` aceita o número (`12` ou `#12`) ou o código do projeto (`WEB-12`).
 
 | Comando | Argumentos | O que faz |
 | --- | --- | --- |
 | `/mcp__tarefas__pendencias` | `projeto?` | Resume o que está aberto (por prioridade, destacando atrasadas, bloqueadas e em andamento) e sugere a próxima tarefa. Não altera nada. |
 | `/mcp__tarefas__proxima` | `projeto?` | Escolhe a tarefa mais importante **sem bloqueios** (prefere continuar o que está em andamento), marca como `doing`, inicia o timer, lê os detalhes e começa o trabalho |
+| `/mcp__tarefas__resolver` | `tarefa` ✓ | Pega **uma tarefa específica**: marca como `doing`, faz o trabalho e conclui com uma nota. Avisa antes de começar se a tarefa já está concluída, arquivada ou bloqueada por outra, e se a sessão está fora da pasta do projeto dela. É o pedido que o botão **Mandar para o Claude** do painel copia. |
 | `/mcp__tarefas__registrar_pendencias` | — | Revisa a conversa inteira e registra no quadro tudo que ficou para depois, sem duplicar, e conclui o que foi resolvido |
 | `/mcp__tarefas__concluir` | `tarefa` ✓, `resumo?` | Conclui a tarefa com nota do que foi feito na sessão (e tempo, se souber). Avisa se há subtarefas abertas. |
 | `/mcp__tarefas__quebrar_tarefa` | `tarefa` ✓ | Divide a tarefa em subtarefas (30 min a 1 dia) com descrição, estimativa e ordem por dependências |
@@ -1501,6 +1503,7 @@ Quando o argumento `projeto` é omitido, o prompt usa o projeto da pasta da sess
 
 ```
 /mcp__tarefas__pendencias "Loja Online"
+/mcp__tarefas__resolver 28
 /mcp__tarefas__concluir 47 corrigido o cálculo e adicionado teste
 /mcp__tarefas__planejar_sprint "Loja Online" 10 "entregar o checkout novo"
 /mcp__tarefas__relatorio semana
@@ -1553,7 +1556,7 @@ As mensagens de erro são em português e dizem o que fazer. Por exemplo: `Colun
 
 | Método | Resposta |
 | --- | --- |
-| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.2.0, título "Quadro de tarefas"), `instructions` |
+| `initialize` | `protocolVersion`, `capabilities`, `serverInfo` (`tarefas` 4.3.0, título "Quadro de tarefas"), `instructions` |
 | `notifications/initialized` | (notificação, sem resposta) |
 | `ping` | `{}` |
 | `tools/list` | `tools[]` com `name`, `title`, `description`, `inputSchema`, `annotations` |
@@ -1598,7 +1601,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 | `src/mcp/tools.js` | As 24 ferramentas originais (ampliadas): esquema, anotações e `run()` |
 | `src/mcp/tools-extra.js` | As 11 ferramentas da paridade (comentários, labels, campos, membros, workspaces, links, busca, importação, exportação, painel e caixa de entrada) e a `code_map` (mapa do código) |
 | `src/mcp/resources.js` | Resources fixos, templates e leitura |
-| `src/mcp/prompts.js` | Os 9 prompts e o autocompletar |
+| `src/mcp/prompts.js` | Os 10 prompts e o autocompletar |
 
 **Para adicionar uma ferramenta:** crie a entrada em `TOOLS` ou `EXTRA_TOOLS` (com `title`, `description` em inglês para o modelo, `inputSchema`, `annotations` e `run`), coloque a regra de negócio no `Store`, confira a permissão com `guardProject`/`guardTask`, acrescente-a à lista de `test/mcp.test.js` e um teste do comportamento.
 
@@ -1644,6 +1647,7 @@ Use sempre `CLAUDE_TASKS_DB=/tmp/teste.db` (ou outro banco descartável) para n�
 
 | Versão | Mudanças |
 | --- | --- |
+| **4.3** (Resolver tarefa) | +1 prompt: `resolver`, que pega uma tarefa específica pelo número ou pelo código. Os prompts `concluir` e `quebrar_tarefa` passam a entender o código do projeto (`WEB-12`); antes ele era lido como o número geral 12. |
 | **4.2** (Simulação no Breakscale) | `code_map` ganha `action: "simulacao"` (a última simulação de carga: cenários, gargalos, premissas e link), e o `status` cita a simulação. |
 | **4.1** (Mapa do código) | +1 ferramenta: `code_map` (situação, visão geral, busca, detalhe e caminho no mapa do código de um projeto, feito pelo plugin `mapa-do-codigo`). `show_in_dashboard` aceita `view: "mapa"`. |
 | **4.0** (paridade com o Taskosaur) | +11 ferramentas: `manage_comment`, `manage_labels`, `manage_fields`, `manage_members`, `manage_workspaces`, `share_link`, `search`, `export_tasks`, `import_tasks`, `show_in_dashboard`, `manage_inbox`. Novos campos nas tarefas: prioridade `lowest`, `story_points`, `remaining`, `reporter`, `watchers`, `fields`, dependências com tipo, recorrência com `weekdays`/`monthday`/`count` e frequência `quarterly`, sprint `"next"`, códigos `WEB-12`. Filtros `reporter`, `watcher`, `tag`. `add_comment` com `reply_to` e menções. `manage_project` com prefixo, status, prioridade, visibilidade, datas e workspace. `manage_columns` com transições e workflows. `manage_sprints` com `cancel`. `manage_automations` com 4 gatilhos (`task_updated`, `sprint_started`, `sprint_completed`, `project_created`), 3 ações (`set_column`, `send_email`, `move_to_sprint`), condição `field` e variáveis `{ref}`/`{sprint}`. Permissões com `CLAUDE_TASKS_ENFORCE` e no chat do painel (os três provedores), com as mesmas regras da API. `send_notification` com o tipo `claude`. Ferramentas assíncronas. `openWorldHint: true` em `import_tasks` e `manage_inbox`; `export_tasks` deixa de ser só leitura. |

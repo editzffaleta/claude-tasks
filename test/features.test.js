@@ -8,7 +8,7 @@ import { Store } from '../src/db.js';
 import { exportCsv, importCsv, importJiraIssues, importTrelloBoard, parseCsv } from '../src/importers.js';
 import { ingestRaw, saveInbox, saveRule } from '../src/inbox.js';
 import { isEncrypted } from '../src/secret.js';
-import { nextOccurrence } from '../src/util.js';
+import { addDays, nextOccurrence, today } from '../src/util.js';
 
 let dir, store, P;
 const ME = { author: 'user', user_id: 1 };
@@ -93,10 +93,13 @@ test('dependências com tipo e sem ciclos', () => {
 test('recorrência avançada: dias da semana, último dia do mês e limite de vezes', () => {
   assert.equal(nextOccurrence('2026-11-02', { freq: 'weekly', interval: 1, weekdays: [1, 3] }), '2026-11-04');
   assert.equal(nextOccurrence('2026-01-31', { freq: 'monthly', interval: 1, monthday: 'last' }), '2026-02-28');
-  const t = store.addTask(P.id, { title: 'Relatório', due_date: '2026-11-02', recurrence: { freq: 'weekly', weekdays: [1, 3], count: 2 } }, ME).task;
+  // Prazo na próxima segunda-feira: a ocorrência seguinte nunca cai antes de hoje, então uma data
+  // fixa no passado faria o resultado depender do dia em que o teste roda.
+  const monday = nextOccurrence(today(), { freq: 'weekly', weekdays: [1] });
+  const t = store.addTask(P.id, { title: 'Relatório', due_date: monday, recurrence: { freq: 'weekly', weekdays: [1, 3], count: 2 } }, ME).task;
   const done1 = store.updateTask(t.id, { status: 'done' }, ME);
   const next = store.task(done1.recurrence_next_id);
-  assert.equal(next.due_date, '2026-11-04');
+  assert.equal(next.due_date, addDays(monday, 2));
   const done2 = store.updateTask(next.id, { status: 'done' }, ME);
   assert.equal(done2.recurrence_next_id, null, 'parou na 2ª ocorrência');
 });

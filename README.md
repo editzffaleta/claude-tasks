@@ -21,7 +21,7 @@
   <a href="https://github.com/editzffaleta/claude-tasks/actions/workflows/ci.yml"><img src="https://github.com/editzffaleta/claude-tasks/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licença-MIT-blue.svg" alt="Licença MIT" /></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen.svg" alt="Node 22.13 ou mais novo" />
-  <img src="https://img.shields.io/badge/MCP-4.2%20%C2%B7%2036%20ferramentas-8a63d2.svg" alt="MCP 4.2 com 36 ferramentas" />
+  <img src="https://img.shields.io/badge/MCP-4.3%20%C2%B7%2036%20ferramentas-8a63d2.svg" alt="MCP 4.3 com 36 ferramentas" />
   <img src="https://img.shields.io/badge/dependências-zero-success.svg" alt="Sem dependências obrigatórias" />
   <img src="https://img.shields.io/badge/idiomas-5-orange.svg" alt="5 idiomas" />
   <a href="#contribuindo"><img src="https://img.shields.io/badge/PRs-bem--vindos-brightgreen.svg" alt="PRs bem-vindos" /></a>
@@ -96,6 +96,10 @@ Ele registra pendências sozinho e responde a pedidos como estes:
 
 Os prompts do servidor também viram comandos no Claude Code, como `/mcp__tarefas__pendencias`,
 `/mcp__tarefas__planejar_sprint` e `/mcp__tarefas__triagem`.
+
+Para mandar o Claude resolver uma tarefa que já está no quadro, abra a tarefa no painel e clique em
+**Mandar para o Claude**: o pedido vai para a área de transferência, pronto para colar numa sessão
+aberta na pasta do projeto. Numa sessão, `/mcp__tarefas__resolver 28` faz o mesmo pelo número.
 
 ### No navegador ou no app do Mac
 
@@ -293,7 +297,7 @@ ligações das peças, nunca o código. Detalhes em [docs/MAPA.md § 7.7](docs/M
 
 ## O servidor MCP
 
-O servidor MCP `tarefas` (versão 4.2, transporte stdio) tem **36 ferramentas**, **9 prompts** e
+O servidor MCP `tarefas` (versão 4.3, transporte stdio) tem **36 ferramentas**, **10 prompts** e
 resources de leitura. Ele aceita os protocolos 2024-11-05, 2025-03-26, 2025-06-18 e 2025-11-25.
 
 | Grupo | Ferramentas |
