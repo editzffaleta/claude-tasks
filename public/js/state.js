@@ -146,6 +146,8 @@ export async function load({ live = false } = {}) {
 let source = null;
 let polling = null;
 let reloading = null;
+let liveHandler = null;
+let liveWanted = false;
 const uiHandlers = new Set();
 export const onUiCommand = (fn) => uiHandlers.add(fn);
 
@@ -157,6 +159,8 @@ async function reloadIfChanged(version, onChange) {
 
 export function startLive(onChange) {
   stopLive();
+  liveHandler = onChange;
+  liveWanted = true;
   if (!('EventSource' in window)) return startPolling(onChange);
   let failures = 0;
   source = new EventSource('/api/events');
@@ -185,6 +189,13 @@ function stopLive() {
   clearInterval(polling);
   polling = null;
 }
+
+// O navegador guarda a página anterior para o "voltar" (bfcache) com a conexão ao vivo ainda aberta,
+// e só abre 6 conexões por servidor: com seis páginas guardadas, a seguinte não consegue carregar.
+// Por isso a conexão fecha quando a página sai da tela e reabre se ela voltar do cache; o "hello"
+// da conexão nova traz a versão do quadro, e o que mudou nesse meio-tempo é recarregado.
+addEventListener('pagehide', () => { if (liveWanted) stopLive(); });
+addEventListener('pageshow', (e) => { if (e.persisted && liveWanted) startLive(liveHandler); });
 
 function startPolling(onChange) {
   polling = setInterval(async () => {
