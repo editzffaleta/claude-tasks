@@ -54,3 +54,15 @@ test('FastAPI: checks added where a router is included count as sign-in checks',
   // over several lines; a database session alone (orders) protects nothing
   assert.deepEqual(openEndpoints(graph), ['POST /orders']);
 });
+
+test('Fastify: checks inside the handler and in a hook count as sign-in checks (#606)', () => {
+  const graph = buildFixture('fastify-guards');
+  assert.equal(graph.routes.length, 9, `expected the sample's 9 endpoints, found ${graph.routes.length}`);
+  // guard(req, …) and requireStaff(req, …) as the handler's first line protect the route; so does an
+  // addHook('onRequest') that authenticates, except for the paths its own allow-list lets through; a
+  // provider token read from a header and compared protects its callback. A handler with no check, a
+  // hook that only logs, and the allow-listed path stay reported.
+  assert.deepEqual(openEndpoints(graph), ['GET /v1/export-all', 'POST /open-things', 'POST /unchecked']);
+  // a dev-server proxy to localhost in vite.config.ts is not the app calling localhost
+  assert.equal(graph.health.issues.filter((i) => i.kind === 'hardcoded-url').length, 0);
+});
