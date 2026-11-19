@@ -186,7 +186,15 @@ const DB_DEPENDENCY = /^(get_|new_|create_)?(async_)?(db|database|session|db_ses
 const isDbDep = (name) => DB_DEPENDENCY.test(snake(name));
 const isGuardDep = (name) => isGuardName(name) && !isDbDep(name);
 // A handler body that inspects the caller itself.
+// Build and test tool settings (a dev-server proxy to localhost lives here and never ships)
+const TOOL_CONFIG = /(^|\/)(vite|vitest|webpack|rollup|rspack|next|nuxt|svelte|astro|playwright|cypress|jest|karma|metro|babel|eslint|tailwind|postcss)\.config\.(m|c)?(j|t)s$/;
 const INLINE_CHECK = /request\.headers(?:\.get)?\(?\s*\[?\s*['"](authorization|x-api-key|x-[\w-]*(token|key|secret|signature)[\w-]*)['"]|req\.headers(?:\.|\[\s*['"])(authorization|x-api-key)|\b(verify|check|require|validate|authenticate|authorize)_?\w*(auth|token|session|user|key|signature|webhook|hmac|jwt|device|staff|admin|permission|role|request|caller)\w*\s*\(|\bcurrent_user\b|get_jwt_identity|verify_jwt_in_request|compare_digest|abort\(\s*40[13]\b|,\s*40[13]\s*\)?\s*$|status(?:Code)?\s*[:=(]\s*40[13]\b|\.status\(\s*40[13]\s*\)|req\.user\b|req\.session\.user|req\.auth\b|jwt\.verify|jwtVerify|getServerSession|auth\(\)|currentUser\(|getAuth\(|auth\.getUser|getSession\(|verifyIdToken|getToken\(/m;
+// The same checks as INLINE_CHECK's verb + noun, written in camelCase (requireStaff(req), authenticateApiKey(req),
+// requirePermission(ctx, …)), a call to a function named like a guard that takes the request
+// (guard(req, 'x'), authGuard(request)), and a secret header read by name (req.headers['asaas-access-token']).
+// Fastify projects check the caller this way, inside the handler or in a hook, not in the route's arguments.
+const CAMEL_CHECK = /\b(?:verify|check|require|validate|authenticate|authorize|ensure|assert)(?:[A-Z][a-z0-9]*)*(?:Auth|Token|Session|User|Key|Signature|Webhook|Hmac|Jwt|Device|Staff|Admin|Permission|Role|Scope|Caller|Login|Member|Owner)[A-Za-z0-9]*\s*\(|\b[a-z][A-Za-z0-9]*Guard[A-Za-z0-9]*\s*\(\s*(?:req|request|ctx|c)\b|\bguard(?:Any|All)?\s*\(\s*(?:req|request|ctx|c)\b|\b(?:req|request)\.headers(?:\.|\[\s*['"])[\w-]*(?:token|secret|signature|api-?key)[\w-]*/;
+const checksCaller = (body) => INLINE_CHECK.test(body) || CAMEL_CHECK.test(body);
 const FIREBASE_CHECK = /\b\w+\.auth\b(?!\s*\()|HttpsError\(\s*["'](unauthenticated|permission-denied)["']|enforceAppCheck\s*:\s*true|\b\w+\.app\b\s*(==|!=|===|!==)\s*(undefined|null)|!\s*\w+\.app\b/;
 const SIGNATURE_CHECK =/hmac|signature|verify_?webhook|construct_?event|x-hub-signature|compare_digest|svix|webhooks?\.verify|jwt\.decode|oidc|id_token|authenticated|verify_\w*(token|request|push)/i;
 const NEXT_GUARD = /getServerSession|\bauth\(\)|currentUser\(|getAuth\(|auth\.getUser|supabase\.auth\.get(User|Session)|getSession\(|verifyIdToken|jwt\.verify|jwtVerify|getToken\(|clerkClient|requireAuth|requireUser|withAuth|validateRequest|headers\(\)\.get\(\s*['"]authorization|status:\s*40[13]\b/;
@@ -307,6 +315,25 @@ function jsRoutes(src, f, out) {
   }
   for (const u of uses) if (u.v === 'app' || u.v === 'server') out.push({ k: 'global-guard', framework: 'express', name: u.name, line: u.line });
 
+  // Fastify lifecycle hooks that run before the handler and check the caller
+  const hooks = [];
+  for (const m of src.matchAll(/\b(\w+)\.addHook\(\s*['"`](onRequest|preParsing|preValidation|preHandler)['"`]\s*,/g)) {
+    const line = src.slice(0, m.index).split('\n').length;
+    // the hook's body: up to the first line that closes it at the hook's own indentation (at most 40 lines)
+    const ind = /^\s*/.exec(lines[line - 1])[0].length;
+    let end = line;
+    while (end < lines.length && end < line + 40 && !(/^\s*\}\s*\)\s*;?\s*$/.test(lines[end]) && /^\s*/.exec(lines[end])[0].length <= ind)) end++;
+    const body = lines.slice(line - 1, end + 1).join('\n');
+    if (!CAMEL_CHECK.test(body)) continue;
+    const name = (CAMEL_CHECK.exec(body)[0].match(/[A-Za-z_$][\w$]*/) || ['hook'])[0];
+    // paths the hook lets through: a Set/array of literal paths defined in the file and tested inside the hook
+    const open = new Set();
+    for (const set of src.matchAll(/\b(\w+)\s*=\s*(?:new Set\(\s*)?\[([^\]]*)\]/g)) {
+      if (new RegExp(`\\b${set[1]}\\.(has|includes)\\(`).test(body)) for (const lit of set[2].matchAll(/['"`]([^'"`]+)['"`]/g)) open.add(lit[1]);
+    }
+    hooks.push({ v: m[1], line, name, skips: (p) => !!p && [...open].some((o) => p === o || p.endsWith(o)) });
+  }
+
   routes.forEach((r, idx) => {
     const rec = { k: 'route', line: r.line, method: r.method };
     if (r.framework === 'firebase') {
@@ -336,7 +363,13 @@ function jsRoutes(src, f, out) {
     const prior = uses.find((u) => u.v === r.var && u.line < r.line);
     if (mw) Object.assign(rec, { guard: mw, via: 'middleware' });
     else if (prior) Object.assign(rec, { guard: prior.name, via: 'router' });
-    else if (INLINE_CHECK.test(body)) rec.via = 'inline';
+    else if (checksCaller(body)) rec.via = 'inline';
+    else {
+      // Fastify: app.addHook('onRequest', …) that checks the caller covers the routes registered after it on the
+      // same instance, except the paths the hook itself lets through (an allow-list tested inside the hook)
+      const hook = hooks.find((h) => h.v === r.var && h.line < r.line && !h.skips(r.path));
+      if (hook) Object.assign(rec, { guard: hook.name, via: 'hook' });
+    }
     if (SIGNATURE_CHECK.test(body)) rec.signed = true;
     out.push(rec);
   });
@@ -517,7 +550,7 @@ export function findIssues(src, f) {
   if (/^#!|if\s+__name__\s*==\s*['"]__main__['"]|@(?:\w+\.)*(?:task|shared_task|command|group|receiver|scheduled_job|on_event|listener|hookimpl|periodic_task|cli\.command)\b|require\.main\s*===\s*module|import\.meta\.main/m.test(src)) out.push({ k: 'runnable' });
   // a frontend calling a fixed localhost address (breaks once deployed)
   // (only in files with no environment / hostname switching, where it can't be a dev-only fallback)
-  if (['typescript', 'javascript', 'vue', 'svelte'].includes(f.lang) && !TEST_FILE.test(f.path) && !/process\.env|import\.meta\.env|NODE_ENV|location\.(hostname|host|origin)|isDev|__DEV__/.test(src)) {
+  if (['typescript', 'javascript', 'vue', 'svelte'].includes(f.lang) && !TEST_FILE.test(f.path) && !TOOL_CONFIG.test(f.path) && !/process\.env|import\.meta\.env|NODE_ENV|location\.(hostname|host|origin)|isDev|__DEV__/.test(src)) {
     src.split('\n').forEach((t, i) => {
       if (/["'`]https?:\/\/(localhost|127\.0\.0\.1):\d+/.test(t) && !/\?\?|\|\||local|dev|fallback|default|^\s*(\/\/|\*)/i.test(t.replace(/https?:\/\/(localhost|127\.0\.0\.1)/g, ''))) out.push({ k: 'localhost', line: i + 1 });
     });
